@@ -11,6 +11,7 @@ enum Paths {
     }()
     static var dictionary: URL { support.appendingPathComponent("dictionary.json") }
     static var history: URL { support.appendingPathComponent("history.jsonl") }
+    static var parakeetLog: URL { support.appendingPathComponent("parakeet.log") }
     static var whisperLog: URL { support.appendingPathComponent("whisper-server.log") }
 }
 
@@ -31,6 +32,10 @@ enum Provider: String, CaseIterable {
     case local, ollama, anthropic, none
 }
 
+enum AsrEngine: String {
+    case fast, accurate
+}
+
 enum HotkeyChoice: String {
     case fn, rightOption
 }
@@ -39,6 +44,10 @@ enum Settings {
     static var provider: Provider {
         get { Provider(rawValue: UserDefaults.standard.string(forKey: "provider") ?? "") ?? .local }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "provider") }
+    }
+    static var asrEngine: AsrEngine {
+        get { AsrEngine(rawValue: UserDefaults.standard.string(forKey: "asrEngine") ?? "") ?? .fast }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "asrEngine") }
     }
     static var hotkey: HotkeyChoice {
         get { HotkeyChoice(rawValue: UserDefaults.standard.string(forKey: "hotkey") ?? "") ?? .fn }

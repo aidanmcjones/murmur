@@ -7,7 +7,7 @@ for line in open(os.path.join(data, "set.jsonl")):
     r = json.loads(line); t = time.time()
     p = subprocess.run([binary, "--transcribe", os.path.join(data, r["id"] + ".wav"), "--bundle-id", r["app"] or "com.google.Chrome"],
                        capture_output=True, text=True, timeout=60)
-    res.append(dict(id=r["id"], app=r["app"], hyp=p.stdout.strip(), wf=r["wf"], edited=r["edited"], wall=time.time()-t, err=p.stderr[-300:]))
+    res.append(dict(id=r["id"], app=r["app"], hyp=p.stdout.strip(), wf=r["wf"], edited=r["edited"], wall=time.time()-t, err=p.stderr[-2000:]))
 E=N=E2=N2=0
 for x in res:
     e,n = fer(x["wf"], x["hyp"]); E+=e; N+=n; x["e"]=e/n

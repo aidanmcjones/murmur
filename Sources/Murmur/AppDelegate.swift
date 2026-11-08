@@ -59,7 +59,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             signalSources.append(src)
         }
 
-        Task { await WhisperServer.shared.ensureRunning() }
+        Task {
+            if Settings.asrEngine == .fast {
+                if await ParakeetEngine.shared.load() { return }  // Whisper stays lazy (1.6 GB RAM)
+            }
+            await WhisperServer.shared.ensureRunning()
+        }
         Task { if Settings.provider == .local { await LocalLLM.shared.ensureRunning() } }
     }
 
@@ -149,6 +154,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
+        let eng = NSMenuItem(title: "Speech engine", action: nil, keyEquivalent: "")
+        let es = NSMenu()
+        for (e, title) in [(AsrEngine.fast, "Fast (Parakeet)"), (AsrEngine.accurate, "Accurate (Whisper)")] {
+            let i = NSMenuItem(title: title, action: #selector(setEngine(_:)), keyEquivalent: "")
+            i.target = self; i.representedObject = e.rawValue
+            i.state = Settings.asrEngine == e ? .on : .off
+            es.addItem(i)
+        }
+        eng.submenu = es
+        menu.addItem(eng)
+
         let prov = NSMenuItem(title: "Cleanup provider", action: nil, keyEquivalent: "")
         let sub = NSMenu()
         for p in Provider.allCases {
@@ -205,6 +221,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         i.target = self
         m.addItem(i)
         return i
+    }
+
+    @objc private func setEngine(_ s: NSMenuItem) {
+        guard let r = s.representedObject as? String, let e = AsrEngine(rawValue: r) else { return }
+        Settings.asrEngine = e
+        Task {
+            if e == .accurate { await WhisperServer.shared.ensureRunning() }
+            else { _ = await ParakeetEngine.shared.load() }
+        }
     }
 
     @objc private func setProvider(_ s: NSMenuItem) {

@@ -42,8 +42,18 @@ enum Pipeline {
             prompt = next
         }
         let t0 = now()
-        guard await WhisperServer.shared.ensureRunning(),
-              let segs = await WhisperServer.shared.transcribe(samples: samples, prompt: prompt) else { return nil }
+        var parakeetSegs: [Segment]?
+        if Settings.asrEngine == .fast, await ParakeetEngine.shared.isReady {
+            parakeetSegs = await ParakeetEngine.shared.transcribe(samples: samples)
+        }
+        let segs: [Segment]
+        if let p = parakeetSegs {
+            segs = p
+        } else {
+            guard await WhisperServer.shared.ensureRunning(),
+                  let w = await WhisperServer.shared.transcribe(samples: samples, prompt: prompt) else { return nil }
+            segs = w
+        }
         let t1 = now()
         let raw = SpeechGate.filter(segs, samples: samples)
         if raw.isEmpty { return nil }
@@ -62,13 +72,18 @@ enum Headless {
             return args[i + 1]
         }
         guard let file = val("--transcribe") else { return 2 }
+        // CoreML/E5RT writes diagnostics to stdout; keep the real stdout clean for the result only.
+        let realOut = dup(STDOUT_FILENO)
+        dup2(STDERR_FILENO, STDOUT_FILENO)
+        if Settings.asrEngine == .fast { await ParakeetEngine.shared.load() }  // test harness: wait for the model
         let bid = val("--bundle-id") ?? ""
         guard let samples = try? Resample.loadFile(URL(fileURLWithPath: file)), !samples.isEmpty else {
             FileHandle.standardError.write(Data("murmur: cannot read \(file)\n".utf8)); return 1
         }
         let ctx = AppContext(bundleId: bid, appName: ContextProbe.name(forBundleId: bid), before: val("--before") ?? "")
         guard let r = await Pipeline.run(samples: samples, ctx: ctx) else { return 0 }
-        print(r.final)
+        _ = r.final.withCString { write(realOut, $0, strlen($0)) }
+        _ = write(realOut, "\n", 1)
         FileHandle.standardError.write(Data("[asr \(r.asrMs)ms, llm \(r.llmMs)ms] raw: \(r.raw)\n".utf8))
         return 0
     }
