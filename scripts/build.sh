@@ -29,5 +29,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
-codesign --force --deep --sign - "$APP"
+# Stable identity keeps macOS privacy grants (Accessibility, Mic) valid across rebuilds;
+# ad-hoc signing changes the code hash every build and silently invalidates them.
+ID=$(security find-identity -p codesigning 2>/dev/null | awk '/"Murmur Local Signing"/{print $2; exit}')
+codesign --force --deep --sign "${ID:--}" "$APP"
 echo "Built $APP"
