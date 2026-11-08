@@ -116,7 +116,7 @@ enum Cleanup {
 
     /// Fallback when the LLM is unavailable: at least strip obvious fillers.
     static func basicClean(_ raw: String) -> String {
-        var t = raw.replacingOccurrences(of: #"(?i)\b(um+|uh+|erm|er|hmm+)\b[,.]?\s*"#, with: "", options: .regularExpression)
+        var t = raw.replacingOccurrences(of: #"(?i)\b(um+|uh+|erm|hmm+)\b[,.…]*\s*"#, with: "", options: .regularExpression)
         t = t.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
         if let f = t.first, f.isLowercase { t = f.uppercased() + t.dropFirst() }
         return t.isEmpty ? raw : t
@@ -146,7 +146,11 @@ enum Cleanup {
         case .none:
             return raw
         case .local:
-            guard await LocalLLM.shared.ensureRunning() else { return basicClean(raw) }
+            // Never block a dictation on model load: if the server isn't ready, start it and fall back.
+            guard await LocalLLM.shared.isReady() else {
+                Task { await LocalLLM.shared.ensureRunning() }
+                return basicClean(raw)
+            }
             if let (d, _) = try? await session().data(for: localRequest(system: system, user: user, maxTokens: 1024)),
                let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
                let ch = o["choices"] as? [[String: Any]], let m = ch.first?["message"] as? [String: Any] { out = m["content"] as? String }

@@ -36,7 +36,7 @@ Nothing was decompiled or copied from Wispr Flow. Its behaviour was matched blac
 | ASR: whisper large-v3-turbo + vocab prompt | WER vs WF raw transcript | 5.2%, 0.26 s p50 |
 | Cleanup: qwen3:4b, given WF's own transcript | format-error vs WF output (raw passthrough = 8.6%) | **7.9%**, 0.47 s p50 |
 | Cleanup: qwen3:14b (optional, slower) | same | 6.5%, 1.8 s p50 |
-| Full Murmur binary | format-error vs WF output | 14.3%, ~1.0 s wall |
+| Full Murmur binary | format-error vs WF output | **11.4%**, ~1.0 s wall (live: 0.75 s key-release → paste) |
 
 Format-error is a token edit distance that counts case, punctuation and line breaks. Most of the remaining end-to-end gap is ASR word choice: WF runs a proprietary cloud ASR, and Murmur runs Whisper locally.
 

@@ -11,6 +11,7 @@ let package = Package(
             resources: [
                 .copy("Resources/cleanup_prompt.txt"),
                 .copy("Resources/styles.json"),
+                .copy("Resources/fewshot.json"),
             ]
         )
     ]

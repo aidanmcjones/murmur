@@ -19,6 +19,8 @@ final class LocalLLM {
         return cands.first { fm.fileExists(atPath: $0) }
     }
 
+    func isReady() async -> Bool { await isUp() }
+
     private func isUp() async -> Bool {
         var req = URLRequest(url: base.appendingPathComponent("health"))
         req.timeoutInterval = 1

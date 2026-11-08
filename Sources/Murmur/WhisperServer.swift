@@ -172,7 +172,11 @@ enum SpeechGate {
             let loudest = levels.max() ?? 0
             segs = zip(segs, levels).filter { $0.1 >= 0.4 * loudest }.map { $0.0 }
         }
-        let text = segs.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }.joined(separator: " ")
+        var text = segs.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }.joined(separator: " ")
+        // Whisper labels non-speech as *Music*, [BLANK_AUDIO], (sighs) etc. — never dictation.
+        text = text.replacingOccurrences(of: #"\*[^*\n]{1,40}\*|\[[^\]\n]{1,40}\]|♪+"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
         if overall < 0.01, hallucinations.contains(text.lowercased()) { return "" }
         return text
     }
