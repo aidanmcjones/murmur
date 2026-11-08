@@ -1,0 +1,4 @@
+{"messaging": "Casual chat/text message. Keep it conversational; a single short sentence may omit the final period. Never use lists unless clearly dictated.",
+ "email": "Email or document. Proper sentences and paragraphs.",
+ "ai": "A prompt to an AI assistant or terminal. Plain text, standard punctuation; lists allowed.",
+ "default": "Standard written text."}

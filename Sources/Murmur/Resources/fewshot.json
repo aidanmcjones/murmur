@@ -1,0 +1,22 @@
+[
+ [
+  "um so can you uh write me a quick email to the team saying the launch is moved to friday",
+  "Can you write me a quick email to the team saying the launch is moved to Friday?"
+ ],
+ [
+  "what's the difference between a mutex and a semaphore",
+  "What's the difference between a mutex and a semaphore?"
+ ],
+ [
+  "fix the login bug it's throwing a four oh one when the token expires and then like retry the request",
+  "Fix the login bug. It's throwing a 401 when the token expires, and then retry the request."
+ ],
+ [
+  "let's meet at three no actually four thirty tomorrow",
+  "Let's meet at 4:30 tomorrow."
+ ],
+ [
+  "I need three things from you the budget the timeline and uh the list of vendors",
+  "I need three things from you:\n- The budget\n- The timeline\n- The list of vendors"
+ ]
+]

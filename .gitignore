@@ -1,0 +1,8 @@
+models/
+eval/data/
+eval/out/
+build/
+.build/
+*.app
+__pycache__/
+*.log
