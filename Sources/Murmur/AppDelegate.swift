@@ -14,6 +14,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var ctx = AppContext(bundleId: "", appName: "", before: "")
     private var probe: Task<String, Never>?
     private var startedAt = Date()
+
+    // Speculative finish: run the pipeline during a pause, before the key is released.
+    private struct SpecJob { let cut: Int; let task: Task<PipelineResult?, Never>; let speechEnd: Int }
+    private var specJob: SpecJob?
+    private var specHadSpeech = false
+    private var specPeak: Float = 0
+    private var specSpeechEnd = 0
+    private static let specSilence = 2400  // 150 ms at 16 kHz
+
+    private func specThreshold() -> Float { max(0.006, 0.2 * specPeak) }
+
+    private func specReset() {
+        specJob?.task.cancel(); specJob = nil
+        specHadSpeech = false; specPeak = 0; specSpeechEnd = 0
+    }
+
+    private func specBuffer(rms: Float, count: Int) {
+        guard state == .recording else { return }
+        specPeak = max(specPeak, rms)
+        if rms > specThreshold() {
+            specHadSpeech = true
+            specSpeechEnd = count
+            if let j = specJob { j.task.cancel(); specJob = nil; DebugLog.log("spec job stale (speech resumed)") }  // speech resumed: stale
+            return
+        }
+        guard specHadSpeech, specJob == nil, count - specSpeechEnd >= Self.specSilence else { return }
+        let snap = Array(recorder.samplesSoFar().prefix(count))
+        guard snap.count == count else { return }
+        let c0 = ctx, probe = self.probe
+        DebugLog.log("spec job launched cut=\(count)")
+        let task = Task { () -> PipelineResult? in
+            var c = c0
+            if let probe { c.before = await probe.value }
+            return await Pipeline.run(samples: snap, ctx: c)
+        }
+        specJob = SpecJob(cut: count, task: task, speechEnd: specSpeechEnd)
+    }
+
+    private func tailHasSpeech(_ all: [Float], from cut: Int) -> Bool {
+        let th = specThreshold()
+        var i = cut
+        while i < all.count {
+            let e = min(all.count, i + 320)  // 20 ms frames
+            if SpeechGate.rms(all[i..<e]) > th { return true }
+            i = e
+        }
+        return false
+    }
     private var signalSources: [DispatchSourceSignal] = []
 
     /// Opening the app again (Finder/Spotlight/`open`) pops the menu at the pointer,
@@ -35,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setIcon(.idle)
 
         recorder.onLevel = { [weak self] v in self?.hud.level(v) }
+        recorder.onBuffer = { [weak self] r, n in self?.specBuffer(rms: r, count: n) }
         recorder.onLimit = { [weak self] in self?.hotkey.reset(); self?.finishRecording() }
         hotkey.onStart = { [weak self] in self?.beginRecording() ?? false }
         hotkey.onStop = { [weak self] in self?.finishRecording() }
@@ -93,7 +142,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         let app = NSWorkspace.shared.frontmostApplication
         ctx = AppContext(bundleId: app?.bundleIdentifier ?? "", appName: app?.localizedName ?? "", before: "")
-        guard recorder.start() else { return false }
+        specReset()
+        guard recorder.start() else { DebugLog.log("beginRecording: recorder.start failed"); return false }
+        DebugLog.log("beginRecording ok app=\(ctx.bundleId)")
         probe = Task {
             await withCheckedContinuation { (k: CheckedContinuation<String, Never>) in
                 DispatchQueue.global(qos: .userInitiated).async { k.resume(returning: ContextProbe.textBeforeCursor()) }
@@ -111,6 +162,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func cancelRecording() {
         guard state == .recording else { return }
         _ = recorder.stop()
+        DebugLog.log("cancelRecording")
+        specReset()
         probe?.cancel(); probe = nil
         state = .idle
         setIcon(.idle)
@@ -120,7 +173,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func finishRecording() {
         guard state == .recording else { return }
         let samples = recorder.stop()
+        let job = specJob
+        specJob = nil
+        DebugLog.log("finishRecording samples=\(samples.count) peak=\(specPeak) job=\(job == nil ? "none" : "cut=\(job!.cut)")")
+        let useSpec = job != nil && tailHasSpeech(samples, from: job!.cut) == false
+        DebugLog.log("finishRecording useSpec=\(useSpec)")
+        if !useSpec { job?.task.cancel() }
+        specHadSpeech = false
         if samples.count < 4800 {  // under 0.3 s
+            job?.task.cancel()
+            DebugLog.log("finishRecording: too short, ignored")
             state = .idle; probe = nil; setIcon(.idle); hud.hide(); return
         }
         state = .processing
@@ -134,13 +196,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             var c1 = c0
             if let probe { c1.before = await probe.value }
             let c = c1
-            let result = await Pipeline.run(samples: samples, ctx: c)
+            let result: PipelineResult?
+            if useSpec, let job { result = await job.task.value } else { result = await Pipeline.run(samples: samples, ctx: c) }
             await MainActor.run {
+                DebugLog.log("finish: result=\(result == nil ? "nil" : "len=\(result!.final.count)") spec=\(useSpec) total=\(Int(Date().timeIntervalSince(t0) * 1000))ms")
                 if let r = result {
                     Inserter.insert(r.final, bundleId: c.bundleId)
                     History.append(HistoryEntry(ts: ISO8601DateFormatter().string(from: t0), raw: r.raw, cleaned: r.final,
                                                 app: c.bundleId, asrMs: r.asrMs, llmMs: r.llmMs,
-                                                totalMs: Int(Date().timeIntervalSince(t0) * 1000)))
+                                                totalMs: Int(Date().timeIntervalSince(t0) * 1000), spec: useSpec))
                 }
                 self.state = .idle
                 self.setIcon(.idle)

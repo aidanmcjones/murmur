@@ -51,15 +51,19 @@ enum Pipeline {
             segs = p
         } else {
             guard await WhisperServer.shared.ensureRunning(),
-                  let w = await WhisperServer.shared.transcribe(samples: samples, prompt: prompt) else { return nil }
+                  let w = await WhisperServer.shared.transcribe(samples: samples, prompt: prompt) else {
+                DebugLog.log("pipeline: whisper unavailable/failed -> nil"); return nil
+            }
             segs = w
         }
         let t1 = now()
         let raw = SpeechGate.filter(segs, samples: samples)
-        if raw.isEmpty { return nil }
+        DebugLog.log("pipeline: samples=\(samples.count) segs=\(segs.count) rawLen=\(raw.count) asr=\(Int(t1 - t0))ms")
+        if raw.isEmpty { DebugLog.log("pipeline: empty after gate -> nil"); return nil }
         let cleaned = await Cleanup.clean(raw: raw, vocab: vocab, before: ctx.before,
                                           bundleId: ctx.bundleId, name: ctx.appName)
         let t2 = now()
+        DebugLog.log("pipeline: cleanup \(Int(t2 - t1))ms cancelled=\(Task.isCancelled) len=\(cleaned.count)")
         let final = Post.finalize(cleaned, before: ctx.before, dictionary: dict)
         return PipelineResult(raw: raw, cleaned: cleaned, final: final, asrMs: Int(t1 - t0), llmMs: Int(t2 - t1))
     }

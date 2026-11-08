@@ -61,12 +61,14 @@ enum Inserter {
         pendingSnapshot = snapshot
         pendingMine = mine
 
+        DebugLog.log("insert len=\(text.count) target=\(bundleId) frontmost=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "?")")
         let src = CGEventSource(stateID: .combinedSessionState)
         for down in [true, false] {
             let e = CGEvent(keyboardEventSource: src, virtualKey: 9, keyDown: down)
             e?.flags = .maskCommand
             e?.post(tap: .cghidEventTap)
         }
+        DebugLog.log("paste posted")
 
         let work = DispatchWorkItem {
             pendingSnapshot = nil; pendingRestore = nil

@@ -34,6 +34,8 @@ final class AudioRecorder {
     private var samples: [Float] = []
     private(set) var running = false
     var onLevel: ((Float) -> Void)?
+    /// Fired on main per buffer with (rms, total sample count after this buffer).
+    var onBuffer: ((Float, Int) -> Void)?
     /// Fired on main when the max duration is hit; the owner should run its normal stop path.
     var onLimit: (() -> Void)?
     static let maxSeconds: TimeInterval = 360
@@ -44,16 +46,19 @@ final class AudioRecorder {
         lock.lock(); samples.removeAll(keepingCapacity: true); lock.unlock()
         let input = engine.inputNode
         let fmt = input.outputFormat(forBus: 0)
-        guard fmt.sampleRate > 0, let conv = AVAudioConverter(from: fmt, to: Resample.target) else { return false }
+        guard fmt.sampleRate > 0, let conv = AVAudioConverter(from: fmt, to: Resample.target) else {
+            DebugLog.log("recorder start failed: bad input format \(fmt)"); return false
+        }
         input.installTap(onBus: 0, bufferSize: 2048, format: fmt) { [weak self] buf, _ in
             guard let self else { return }
             let out = Resample.to16kMono(conv, buf)
             if out.isEmpty { return }
-            self.lock.lock(); self.samples.append(contentsOf: out); self.lock.unlock()
+            self.lock.lock(); self.samples.append(contentsOf: out); let n = self.samples.count; self.lock.unlock()
             let level = SpeechGate.rms(out[...])
-            DispatchQueue.main.async { self.onLevel?(level) }
+            DispatchQueue.main.async { self.onLevel?(level); self.onBuffer?(level, n) }
         }
         do { try engine.start() } catch {
+            DebugLog.log("engine.start failed: \(error)")
             input.removeTap(onBus: 0); return false
         }
         running = true
@@ -64,6 +69,12 @@ final class AudioRecorder {
             self.onLimit?()
         }
         return true
+    }
+
+    /// Thread-safe copy of the samples captured so far.
+    func samplesSoFar() -> [Float] {
+        lock.lock(); defer { lock.unlock() }
+        return samples
     }
 
     func stop() -> [Float] {
