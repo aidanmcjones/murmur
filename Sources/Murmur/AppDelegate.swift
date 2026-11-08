@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     enum State { case idle, recording, processing }
 
     private var statusItem: NSStatusItem!
+    private var hotkeyRetry: Timer?
     private let hotkey = Hotkey()
     private let recorder = AudioRecorder()
     private let hud = HUD()
@@ -14,6 +15,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var probe: Task<String, Never>?
     private var startedAt = Date()
     private var signalSources: [DispatchSourceSignal] = []
+
+    /// Opening the app again (Finder/Spotlight/`open`) pops the menu at the pointer,
+    /// so it's reachable even when macOS hides the menu-bar icon behind the notch.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if let menu = statusItem.menu {
+            menuNeedsUpdate(menu)
+            NSApp.activate(ignoringOtherApps: true)
+            menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        }
+        return false
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -27,7 +39,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotkey.onStart = { [weak self] in self?.beginRecording() ?? false }
         hotkey.onStop = { [weak self] in self?.finishRecording() }
         hotkey.onCancel = { [weak self] in self?.cancelRecording() }
-        if !hotkey.start() { checkPermissions() }
+        if hotkey.start() {
+            Toast.show("Murmur ready — hold fn to talk")
+        } else {
+            checkPermissions()
+            Toast.show("Murmur needs Accessibility — enable it in System Settings", seconds: 6)
+            // Retry until the user grants Accessibility; no relaunch needed.
+            hotkeyRetry = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] t in
+                guard let self else { t.invalidate(); return }
+                if self.hotkey.start() { t.invalidate(); Toast.show("Murmur ready — hold fn to talk") }
+            }
+        }
 
         for sig in [SIGTERM, SIGINT] {
             signal(sig, SIG_IGN)
