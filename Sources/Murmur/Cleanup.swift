@@ -88,8 +88,8 @@ enum Cleanup {
 
     private static func session() -> URLSession {
         let c = URLSessionConfiguration.ephemeral
-        c.timeoutIntervalForRequest = 10
-        c.timeoutIntervalForResource = 10
+        c.timeoutIntervalForRequest = 4
+        c.timeoutIntervalForResource = 4
         return URLSession(configuration: c)
     }
 
@@ -104,7 +104,31 @@ enum Cleanup {
         return try! JSONSerialization.data(withJSONObject: body)
     }
 
+    private static func localRequest(system: String, user: String, maxTokens: Int) -> URLRequest {
+        var req = URLRequest(url: LocalLLM.shared.base.appendingPathComponent("v1/chat/completions"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = ["messages": [["role": "system", "content": system]] + Cleanup.fewShot + [["role": "user", "content": user]],
+                                   "temperature": 0, "max_tokens": maxTokens, "cache_prompt": true]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        return req
+    }
+
+    /// Fallback when the LLM is unavailable: at least strip obvious fillers.
+    static func basicClean(_ raw: String) -> String {
+        var t = raw.replacingOccurrences(of: #"(?i)\b(um+|uh+|erm|er|hmm+)\b[,.]?\s*"#, with: "", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+        if let f = t.first, f.isLowercase { t = f.uppercased() + t.dropFirst() }
+        return t.isEmpty ? raw : t
+    }
+
     static func prewarm(bundleId: String, name: String) async {
+        if Settings.provider == .local {
+            guard await LocalLLM.shared.ensureRunning() else { return }
+            let sys = systemPrompt(bundleId: bundleId, name: name, vocab: UserDictionary.vocabulary(UserDictionary.load()))
+            _ = try? await session().data(for: localRequest(system: sys, user: wrap("ok"), maxTokens: 1))
+            return
+        }
         guard Settings.provider == .ollama else { return }
         var req = URLRequest(url: URL(string: "http://127.0.0.1:11434/api/chat")!)
         req.httpMethod = "POST"
@@ -121,6 +145,11 @@ enum Cleanup {
         switch Settings.provider {
         case .none:
             return raw
+        case .local:
+            guard await LocalLLM.shared.ensureRunning() else { return basicClean(raw) }
+            if let (d, _) = try? await session().data(for: localRequest(system: system, user: user, maxTokens: 1024)),
+               let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+               let ch = o["choices"] as? [[String: Any]], let m = ch.first?["message"] as? [String: Any] { out = m["content"] as? String }
         case .ollama:
             var req = URLRequest(url: URL(string: "http://127.0.0.1:11434/api/chat")!)
             req.httpMethod = "POST"
@@ -143,7 +172,7 @@ enum Cleanup {
                let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
                let c = o["content"] as? [[String: Any]] { out = c.first?["text"] as? String }
         }
-        guard var text = out else { return raw }
+        guard var text = out else { return basicClean(raw) }
         if let r = text.range(of: "</think>") { text = String(text[r.upperBound...]) }
         text = text.replacingOccurrences(of: "<<<", with: "").replacingOccurrences(of: ">>>", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)

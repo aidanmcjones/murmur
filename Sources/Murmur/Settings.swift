@@ -28,7 +28,7 @@ enum Res {
 }
 
 enum Provider: String, CaseIterable {
-    case ollama, anthropic, none
+    case local, ollama, anthropic, none
 }
 
 enum HotkeyChoice: String {
@@ -37,7 +37,7 @@ enum HotkeyChoice: String {
 
 enum Settings {
     static var provider: Provider {
-        get { Provider(rawValue: UserDefaults.standard.string(forKey: "provider") ?? "") ?? .ollama }
+        get { Provider(rawValue: UserDefaults.standard.string(forKey: "provider") ?? "") ?? .local }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "provider") }
     }
     static var hotkey: HotkeyChoice {

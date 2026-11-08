@@ -5,6 +5,7 @@ if CommandLine.arguments.contains("--transcribe") {
     Task {
         let code = await Headless.run(args)
         WhisperServer.shared.shutdown()
+        LocalLLM.shared.shutdown()
         exit(code)
     }
     dispatchMain()

@@ -47,4 +47,6 @@ python3 -I eval/asr_eval.py eval/data 8178 eval/out/asr.json
 python3 -I eval/fmt_eval.py eval/data qwen3:4b-instruct-2507-q4_K_M wfasr eval/out/fmt.json
 python3 -I eval/swift_e2e.py eval/data build/Murmur.app/Contents/MacOS/Murmur eval/out/e2e.json
 ```
+Cleanup runs on Murmur's own llama.cpp server (port 8179, `models/qwen3-4b-instruct-2507-q4_K_M.gguf`) with the weights mlock'ed in RAM. Under heavy swap, ollama stalled for 5–10 s per request; this setup takes about 0.2–1 s. Murmur is signed with a local "Murmur Local Signing" certificate so macOS permission grants survive rebuilds.
+
 For higher fidelity, set the provider to Anthropic (Claude Haiku 5.5) and run `defaults write com.aidanjones.murmur ollamaModel qwen3:14b`, or run `fmt_eval.py` with `claude-haiku-5-5` and `ANTHROPIC_API_KEY` set to measure it.

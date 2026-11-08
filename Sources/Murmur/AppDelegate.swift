@@ -54,16 +54,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for sig in [SIGTERM, SIGINT] {
             signal(sig, SIG_IGN)
             let src = DispatchSource.makeSignalSource(signal: sig, queue: .main)
-            src.setEventHandler { WhisperServer.shared.shutdown(); exit(0) }
+            src.setEventHandler { WhisperServer.shared.shutdown(); LocalLLM.shared.shutdown(); exit(0) }
             src.resume()
             signalSources.append(src)
         }
 
         Task { await WhisperServer.shared.ensureRunning() }
+        Task { if Settings.provider == .local { await LocalLLM.shared.ensureRunning() } }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         WhisperServer.shared.shutdown()
+        LocalLLM.shared.shutdown()
     }
 
     // MARK: Recording flow
