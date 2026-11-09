@@ -6,6 +6,16 @@ struct PipelineResult {
     var final: String
     var asrMs: Int
     var llmMs: Int
+    var mode: Cleanup.Mode = .det
+}
+
+/// Holds the raw transcript of an in-flight run as soon as ASR finishes, so the caller can paste a
+/// deterministic cleanup of it if the LLM stage misses the post-release deadline.
+final class RawBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _v: (String, Int)?
+    var value: (String, Int)? { lock.lock(); defer { lock.unlock() }; return _v }
+    func set(_ v: (String, Int)) { lock.lock(); _v = v; lock.unlock() }
 }
 
 enum Post {
@@ -32,7 +42,7 @@ enum Pipeline {
     static func now() -> Double { Date().timeIntervalSince1970 * 1000 }
 
     /// Steps 3-7. Returns nil when there is nothing to insert.
-    static func run(samples: [Float], ctx: AppContext) async -> PipelineResult? {
+    static func run(samples: [Float], ctx: AppContext, llmTimeout: TimeInterval, rawBox: RawBox? = nil) async -> PipelineResult? {
         let dict = UserDictionary.load()
         let vocab = UserDictionary.vocabulary(dict)
         var prompt = ""
@@ -43,8 +53,11 @@ enum Pipeline {
         }
         let t0 = now()
         var parakeetSegs: [Segment]?
-        if Settings.asrEngine == .fast, await ParakeetEngine.shared.isReady {
+        if Settings.asrEngine == .fast {
+            // Never fall through to Whisper in Fast mode: a cold whisper-server start took ~10 s under swap.
+            if !(await ParakeetEngine.shared.isReady) { _ = await ParakeetEngine.shared.load() }
             parakeetSegs = await ParakeetEngine.shared.transcribe(samples: samples)
+            if parakeetSegs == nil { DebugLog.log("pipeline: parakeet failed -> nil"); return nil }
         }
         let segs: [Segment]
         if let p = parakeetSegs {
@@ -60,12 +73,13 @@ enum Pipeline {
         let raw = SpeechGate.filter(segs, samples: samples)
         DebugLog.log("pipeline: samples=\(samples.count) segs=\(segs.count) rawLen=\(raw.count) asr=\(Int(t1 - t0))ms")
         if raw.isEmpty { DebugLog.log("pipeline: empty after gate -> nil"); return nil }
-        let cleaned = await Cleanup.clean(raw: raw, vocab: vocab, before: ctx.before,
-                                          bundleId: ctx.bundleId, name: ctx.appName)
+        rawBox?.set((raw, Int(t1 - t0)))
+        let (cleaned, mode) = await Cleanup.clean(raw: raw, vocab: vocab, before: ctx.before,
+                                                  bundleId: ctx.bundleId, name: ctx.appName, timeout: llmTimeout)
         let t2 = now()
-        DebugLog.log("pipeline: cleanup \(Int(t2 - t1))ms cancelled=\(Task.isCancelled) len=\(cleaned.count)")
+        DebugLog.log("pipeline: cleanup \(mode.rawValue) \(Int(t2 - t1))ms cancelled=\(Task.isCancelled) len=\(cleaned.count)")
         let final = Post.finalize(cleaned, before: ctx.before, dictionary: dict)
-        return PipelineResult(raw: raw, cleaned: cleaned, final: final, asrMs: Int(t1 - t0), llmMs: Int(t2 - t1))
+        return PipelineResult(raw: raw, cleaned: cleaned, final: final, asrMs: Int(t1 - t0), llmMs: Int(t2 - t1), mode: mode)
     }
 }
 
@@ -85,10 +99,10 @@ enum Headless {
             FileHandle.standardError.write(Data("murmur: cannot read \(file)\n".utf8)); return 1
         }
         let ctx = AppContext(bundleId: bid, appName: ContextProbe.name(forBundleId: bid), before: val("--before") ?? "")
-        guard let r = await Pipeline.run(samples: samples, ctx: ctx) else { return 0 }
+        guard let r = await Pipeline.run(samples: samples, ctx: ctx, llmTimeout: 30) else { return 0 }
         _ = r.final.withCString { write(realOut, $0, strlen($0)) }
         _ = write(realOut, "\n", 1)
-        FileHandle.standardError.write(Data("[asr \(r.asrMs)ms, llm \(r.llmMs)ms] raw: \(r.raw)\n".utf8))
+        FileHandle.standardError.write(Data("[asr \(r.asrMs)ms, llm \(r.llmMs)ms \(r.mode.rawValue)] raw: \(r.raw)\n".utf8))
         return 0
     }
 }

@@ -16,7 +16,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var startedAt = Date()
 
     // Speculative finish: run the pipeline during a pause, before the key is released.
-    private struct SpecJob { let cut: Int; let task: Task<PipelineResult?, Never>; let speechEnd: Int }
+    private struct SpecJob { let cut: Int; let task: Task<PipelineResult?, Never>; let speechEnd: Int; let raw: RawBox }
+    /// Upper bound on cleanup time after the key is released. Wispr Flow measures 322 ms p50 / 530 ms p90
+    /// release-to-paste on this Mac; past this budget Murmur pastes the deterministic cleanup of the transcript.
+    static let releaseBudget: TimeInterval = 0.9
+
+    private static func value(of task: Task<PipelineResult?, Never>, within t: TimeInterval) async -> PipelineResult? {
+        await withTaskGroup(of: PipelineResult?.self) { g in
+            g.addTask { await task.value }
+            g.addTask { try? await Task.sleep(nanoseconds: UInt64(t * 1_000_000_000)); return nil }
+            let r = await g.next() ?? nil
+            g.cancelAll()  // stops waiting; does not cancel `task` itself
+            return r
+        }
+    }
+
+    private static func fallback(raw: String, asrMs: Int, ctx: AppContext) -> PipelineResult {
+        let cleaned = Cleanup.basicClean(raw)
+        return PipelineResult(raw: raw, cleaned: cleaned,
+                              final: Post.finalize(cleaned, before: ctx.before, dictionary: UserDictionary.load()),
+                              asrMs: asrMs, llmMs: -1, mode: .timeout)
+    }
     private var specJob: SpecJob?
     private var specHadSpeech = false
     private var specPeak: Float = 0
@@ -44,12 +64,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard snap.count == count else { return }
         let c0 = ctx, probe = self.probe
         DebugLog.log("spec job launched cut=\(count)")
+        let box = RawBox()
         let task = Task { () -> PipelineResult? in
             var c = c0
             if let probe { c.before = await probe.value }
-            return await Pipeline.run(samples: snap, ctx: c)
+            return await Pipeline.run(samples: snap, ctx: c, llmTimeout: 4, rawBox: box)
         }
-        specJob = SpecJob(cut: count, task: task, speechEnd: specSpeechEnd)
+        specJob = SpecJob(cut: count, task: task, speechEnd: specSpeechEnd, raw: box)
     }
 
     private func tailHasSpeech(_ all: [Float], from cut: Int) -> Bool {
@@ -113,6 +134,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if await ParakeetEngine.shared.load() { return }  // Whisper stays lazy (1.6 GB RAM)
             }
             await WhisperServer.shared.ensureRunning()
+        }
+        // One-time: an Ollama provider setting stalls 4 s per dictation after Ollama unloads its model
+        // (30 min idle) and under swap; Murmur's own mlocked llama-server stays resident.
+        if !UserDefaults.standard.bool(forKey: "migratedProviderV2") {
+            if Settings.provider == .ollama, LocalLLM.modelPath() != nil { Settings.provider = .local }
+            UserDefaults.standard.set(true, forKey: "migratedProviderV2")
         }
         Task { if Settings.provider == .local { await LocalLLM.shared.ensureRunning() } }
     }
@@ -196,15 +223,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             var c1 = c0
             if let probe { c1.before = await probe.value }
             let c = c1
-            let result: PipelineResult?
-            if useSpec, let job { result = await job.task.value } else { result = await Pipeline.run(samples: samples, ctx: c) }
+            var result: PipelineResult?
+            if useSpec, let job {
+                result = await Self.value(of: job.task, within: Self.releaseBudget)
+                if result == nil, let (raw, asrMs) = job.raw.value {
+                    job.task.cancel()
+                    DebugLog.log("finish: spec cleanup missed budget -> deterministic")
+                    result = Self.fallback(raw: raw, asrMs: asrMs, ctx: c)
+                } else if result == nil {
+                    result = await job.task.value
+                }
+            } else {
+                result = await Pipeline.run(samples: samples, ctx: c, llmTimeout: Self.releaseBudget)
+            }
             await MainActor.run {
                 DebugLog.log("finish: result=\(result == nil ? "nil" : "len=\(result!.final.count)") spec=\(useSpec) total=\(Int(Date().timeIntervalSince(t0) * 1000))ms")
                 if let r = result {
                     Inserter.insert(r.final, bundleId: c.bundleId)
                     History.append(HistoryEntry(ts: ISO8601DateFormatter().string(from: t0), raw: r.raw, cleaned: r.final,
                                                 app: c.bundleId, asrMs: r.asrMs, llmMs: r.llmMs,
-                                                totalMs: Int(Date().timeIntervalSince(t0) * 1000), spec: useSpec))
+                                                totalMs: Int(Date().timeIntervalSince(t0) * 1000), spec: useSpec,
+                                                mode: r.mode.rawValue))
                 }
                 self.state = .idle
                 self.setIcon(.idle)
@@ -220,7 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let eng = NSMenuItem(title: "Speech engine", action: nil, keyEquivalent: "")
         let es = NSMenu()
-        for (e, title) in [(AsrEngine.fast, "Fast (Parakeet)"), (AsrEngine.accurate, "Accurate (Whisper)")] {
+        for (e, title) in [(AsrEngine.fast, "Parakeet Ultra (recommended)"), (AsrEngine.accurate, "Whisper (slower, less accurate)")] {
             let i = NSMenuItem(title: title, action: #selector(setEngine(_:)), keyEquivalent: "")
             i.target = self; i.representedObject = e.rawValue
             i.state = Settings.asrEngine == e ? .on : .off
@@ -292,7 +331,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Settings.asrEngine = e
         Task {
             if e == .accurate { await WhisperServer.shared.ensureRunning() }
-            else { _ = await ParakeetEngine.shared.load() }
+            else {
+                _ = await ParakeetEngine.shared.load()
+                WhisperServer.shared.shutdown()  // frees ~1.6 GB; only stops a server Murmur started
+            }
         }
     }
 

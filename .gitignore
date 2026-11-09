@@ -6,3 +6,5 @@ build/
 *.app
 __pycache__/
 *.log
+eval/asrbench/.build/
+eval/data2/

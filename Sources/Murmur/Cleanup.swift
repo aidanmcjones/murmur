@@ -79,11 +79,18 @@ enum Cleanup {
         return d[b.count]
     }
     /// Deletions (fillers, self-corrections) are fine; new words mean the model rewrote or answered.
+    /// Strict: the cleanup may delete fillers and corrected phrases and fix punctuation, but not reword,
+    /// censor, or answer. Thresholds chosen on the held-out Wispr Flow eval (eval/cleanup_eval.py).
+    static let profanity = try! NSRegularExpression(pattern: #"(?i)fuck|shit|damn|bitch|\bass\b"#)
     static func guardOutput(raw: String, hyp: String) -> String {
         let r = normWords(raw), h = normWords(hyp)
         let novel = Double(h.count - lcs(r, h)) / Double(max(h.count, 1))
         let hw = hyp.split(whereSeparator: \.isWhitespace).count, rw = raw.split(whereSeparator: \.isWhitespace).count
-        return (novel <= 0.2 && Double(h.count) >= 0.3 * Double(r.count) && Double(hw) <= 1.5 * Double(rw) + 6) ? hyp : raw
+        func count(_ re: NSRegularExpression, _ s: String) -> Int { re.numberOfMatches(in: s, range: NSRange(s.startIndex..., in: s)) }
+        let ok = novel <= 0.08 && Double(h.count) >= 0.6 * Double(r.count) && Double(hw) <= 1.5 * Double(rw) + 6
+            && count(profanity, hyp) >= count(profanity, raw)
+            && hyp.range(of: #"\w-\s?['’ ]?t\b"#, options: .regularExpression) == nil
+        return ok ? hyp : raw
     }
 
     private static func session() -> URLSession {
@@ -104,6 +111,10 @@ enum Cleanup {
         return try! JSONSerialization.data(withJSONObject: body)
     }
 
+    static func messages(system: String, user: String) -> [[String: Any]] {
+        [["role": "system", "content": system]] + Cleanup.fewShot + [["role": "user", "content": user]]
+    }
+
     private static func localRequest(system: String, user: String, maxTokens: Int) -> URLRequest {
         var req = URLRequest(url: LocalLLM.shared.base.appendingPathComponent("v1/chat/completions"))
         req.httpMethod = "POST"
@@ -114,19 +125,41 @@ enum Cleanup {
         return req
     }
 
-    /// Fallback when the LLM is unavailable: at least strip obvious fillers.
+    /// Deterministic cleanup used when the transcript needs no rewriting, and as the fallback when the
+    /// LLM misses its deadline: strip fillers and stutters, tidy spacing, capitalize the first letter.
     static func basicClean(_ raw: String) -> String {
-        var t = raw.replacingOccurrences(of: #"(?i)\b(um+|uh+|erm|hmm+)\b[,.…]*\s*"#, with: "", options: .regularExpression)
-        t = t.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+        var t = raw.replacingOccurrences(of: #"(?i)(^|\s)(um+|uh+|erm+|hmm+)[,.…]*(?=\s|$)"#, with: " ", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"(?i)\b(\w+)(?: \1\b)+"#, with: "$1", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"\s+([,.?!])"#, with: "$1", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"^[,.\s]+"#, with: "", options: .regularExpression).trimmingCharacters(in: .whitespaces)
         if let f = t.first, f.isLowercase { t = f.uppercased() + t.dropFirst() }
         return t.isEmpty ? raw : t
+    }
+
+    /// True when the transcript has something deterministic cleanup can't fix: self-corrections, fillers,
+    /// spoken punctuation/commands, or repeated words. On 250 held-out Wispr Flow clips this fires on ~7%;
+    /// on the rest the local LLM was neutral-to-harmful for fidelity (it reworded, censored, or answered
+    /// the dictation) and only added latency.
+    static let needsLLMPattern: NSRegularExpression = try! NSRegularExpression(pattern:
+        #"(?i)\b(um+|uh+|actually|no wait|wait no|scratch that|i mean|or rather|comma|period|question mark|"# +
+        #"new ?line|new paragraph|colon|bullet|number one|firstly|secondly)\b|\b(\w+) \2\b"#)
+    static var gateEnabled: Bool { !UserDefaults.standard.bool(forKey: "alwaysLLM") }
+    static func needsLLM(_ raw: String) -> Bool {
+        if !gateEnabled { return true }
+        return needsLLMPattern.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)) != nil
+    }
+
+    /// Small-model output artifacts seen in history ("don-'t").
+    static func fixArtifacts(_ s: String) -> String {
+        s.replacingOccurrences(of: #"(\p{L})-['’](\p{L})"#, with: "$1'$2", options: .regularExpression)
     }
 
     static func prewarm(bundleId: String, name: String) async {
         if Settings.provider == .local {
             guard await LocalLLM.shared.ensureRunning() else { return }
             let sys = systemPrompt(bundleId: bundleId, name: name, vocab: UserDictionary.vocabulary(UserDictionary.load()))
-            _ = try? await session().data(for: localRequest(system: sys, user: wrap("ok"), maxTokens: 1))
+            _ = await LocalLLM.shared.complete(messages: messages(system: sys, user: wrap("ok")), maxTokens: 1, timeout: 3)
             return
         }
         guard Settings.provider == .ollama else { return }
@@ -137,33 +170,38 @@ enum Cleanup {
         _ = try? await session().data(for: req)
     }
 
-    /// Returns cleaned text, or the raw transcript on any failure/timeout.
-    static func clean(raw: String, vocab: [String], before: String, bundleId: String, name: String) async -> String {
+    enum Mode: String { case llm, det, timeout }
+
+    /// Returns cleaned text and how it was produced. Falls back to deterministic cleanup when the transcript
+    /// doesn't need the LLM, or when the LLM fails or misses `timeout`.
+    static func clean(raw: String, vocab: [String], before: String, bundleId: String, name: String,
+                      timeout: TimeInterval) async -> (String, Mode) {
+        if Settings.provider == .none { return (raw, .det) }
+        if !needsLLM(raw) { return (basicClean(raw), .det) }
         let system = systemPrompt(bundleId: bundleId, name: name, vocab: vocab)
         let user = wrap(raw)
         var out: String?
         switch Settings.provider {
         case .none:
-            return raw
+            return (raw, .det)
         case .local:
             // Never block a dictation on model load: if the server isn't ready, start it and fall back.
             guard await LocalLLM.shared.isReady() else {
                 Task { await LocalLLM.shared.ensureRunning() }
-                return basicClean(raw)
+                return (basicClean(raw), .timeout)
             }
-            if let (d, _) = try? await session().data(for: localRequest(system: system, user: user, maxTokens: 1024)),
-               let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
-               let ch = o["choices"] as? [[String: Any]], let m = ch.first?["message"] as? [String: Any] { out = m["content"] as? String }
+            out = await LocalLLM.shared.complete(messages: messages(system: system, user: user), maxTokens: 1024, timeout: timeout)
         case .ollama:
             var req = URLRequest(url: URL(string: "http://127.0.0.1:11434/api/chat")!)
             req.httpMethod = "POST"
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = ollamaBody(system: system, user: user, numPredict: nil)
+            req.timeoutInterval = timeout
             if let (d, _) = try? await session().data(for: req),
                let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
                let m = o["message"] as? [String: Any] { out = m["content"] as? String }
         case .anthropic:
-            guard let key = Keychain.get() else { return raw }
+            guard let key = Keychain.get() else { return (basicClean(raw), .det) }
             var req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
             req.httpMethod = "POST"
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -172,14 +210,18 @@ enum Cleanup {
             let body: [String: Any] = ["model": "claude-haiku-5-5", "max_tokens": 1024, "temperature": 0,
                 "system": system, "messages": Cleanup.fewShot + [["role": "user", "content": user]]]
             req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            req.timeoutInterval = timeout
             if let (d, _) = try? await session().data(for: req),
                let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
                let c = o["content"] as? [[String: Any]] { out = c.first?["text"] as? String }
         }
-        guard var text = out else { return basicClean(raw) }
+        guard var text = out else { return (basicClean(raw), .timeout) }
         if let r = text.range(of: "</think>") { text = String(text[r.upperBound...]) }
         text = text.replacingOccurrences(of: "<<<", with: "").replacingOccurrences(of: ">>>", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? raw : guardOutput(raw: raw, hyp: text)
+        text = fixArtifacts(text)
+        if text.isEmpty { return (basicClean(raw), .timeout) }
+        let g = guardOutput(raw: raw, hyp: text)
+        return (g == raw ? basicClean(raw) : g, .llm)
     }
 }

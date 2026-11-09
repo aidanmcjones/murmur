@@ -1,7 +1,8 @@
 import FluidAudio
 import Foundation
 
-/// Parakeet TDT v2 (English) via FluidAudio / CoreML. Produces the same `Segment`s as WhisperServer
+/// Parakeet (default: Ultra, moondream's post-trained TDT v3) via FluidAudio / CoreML.
+/// On 250 held-out Wispr Flow clips Ultra had 2.8% WER vs WF's ASR, against 6.7% for v2, at the same speed. Produces the same `Segment`s as WhisperServer
 /// so `SpeechGate.filter` applies unchanged.
 actor ParakeetEngine {
     static let shared = ParakeetEngine()
@@ -16,6 +17,14 @@ actor ParakeetEngine {
         return 0
     }()
     static let segmentGap = 0.5
+    /// `defaults write com.aidanjones.murmur parakeetVersion v2` to go back.
+    static var version: AsrModelVersion {
+        switch UserDefaults.standard.string(forKey: "parakeetVersion") ?? "ultra" {
+        case "v2": return .v2
+        case "v3": return .v3
+        default: return .ultra
+        }
+    }
 
     private static func log(_ msg: String) {
         let line = "\(ISO8601DateFormatter().string(from: Date())) \(msg)\n"
@@ -42,13 +51,13 @@ actor ParakeetEngine {
     private func doLoad() async -> Bool {
         let t0 = Date()
         do {
-            let models = try await AsrModels.downloadAndLoad(version: .v2)
+            let models = try await AsrModels.downloadAndLoad(version: Self.version)
             let m = AsrManager(config: .default)
             try await m.loadModels(models)
             layers = await m.decoderLayerCount
             manager = m
             isReady = true
-            Self.log(String(format: "loaded v2 in %.2fs", Date().timeIntervalSince(t0)))
+            Self.log(String(format: "loaded \(Self.version) in %.2fs", Date().timeIntervalSince(t0)))
             return true
         } catch {
             Self.log("load failed after \(String(format: "%.2f", Date().timeIntervalSince(t0)))s: \(error)")
@@ -70,10 +79,14 @@ actor ParakeetEngine {
         // Group tokens into words: a token starting with a space (or the SentencePiece marker) starts a word.
         struct Word { var text: String; var start: Double; var end: Double; var conf: Float; var n: Int }
         var words: [Word] = []
+        var pendingStart = false
         for t in timings {
-            let startsWord = t.token.hasPrefix(" ") || t.token.hasPrefix("\u{2581}")
+            // A bare "▁" token marks the *next* token as a word start (v3-family vocab splits "▁" from digits);
+            // dropping it glued words together ("the11-hour").
+            let startsWord = pendingStart || t.token.hasPrefix(" ") || t.token.hasPrefix("\u{2581}")
             let piece = t.token.replacingOccurrences(of: "\u{2581}", with: " ").trimmingCharacters(in: .whitespaces)
-            if piece.isEmpty { continue }
+            if piece.isEmpty { pendingStart = pendingStart || startsWord; continue }
+            pendingStart = false
             if startsWord || words.isEmpty {
                 words.append(Word(text: piece, start: t.startTime, end: t.endTime, conf: t.confidence, n: 1))
             } else {
@@ -84,7 +97,11 @@ actor ParakeetEngine {
             }
         }
         words = words.filter { $0.conf / Float($0.n) >= Self.minWordConfidence }
-        words = Self.dropBackgroundWords(words.map { ($0, $0.start, $0.end) }, samples: samples).map(\.0)
+        // Off by default: on 250 held-out clips this deleted the speaker's own sentence-final words
+        // ("for me. You say" → "for say") far more often than it removed background speech.
+        if UserDefaults.standard.bool(forKey: "pkWordGate") {
+            words = Self.dropBackgroundWords(words.map { ($0, $0.start, $0.end) }, samples: samples).map(\.0)
+        }
         var segs: [Segment] = []
         var cur: [Word] = []
         func flush() {

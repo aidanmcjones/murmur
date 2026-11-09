@@ -163,7 +163,7 @@ enum SpeechGate {
     static func filter(_ segments: [Segment], samples: [Float]) -> String {
         var segs = segments.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
         let overall = rms(samples[...])
-        if segs.count >= 2 {
+        if segs.count >= 2, UserDefaults.standard.object(forKey: "segGate") as? Bool ?? true {
             let levels = segs.map { s -> Float in
                 let a = max(0, min(samples.count, Int(s.start * 16000)))
                 let b = max(a, min(samples.count, Int(s.end * 16000)))

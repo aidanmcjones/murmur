@@ -79,6 +79,52 @@ final class LocalLLM {
         return false
     }
 
+    private static let streamSession: URLSession = {
+        let c = URLSessionConfiguration.ephemeral
+        c.timeoutIntervalForRequest = 10
+        c.timeoutIntervalForResource = 30
+        return URLSession(configuration: c)
+    }()
+
+    /// Streamed chat completion with a hard deadline. Streaming matters for latency: when the calling Task is
+    /// cancelled (a speculative job went stale) or the deadline passes, the connection closes and llama-server
+    /// stops generating at the next token. A non-streamed request kept the single slot busy until it finished,
+    /// so stale speculative requests queued in front of the final one and pushed it past the timeout.
+    func complete(messages: [[String: Any]], maxTokens: Int, timeout: TimeInterval) async -> String? {
+        var req = URLRequest(url: base.appendingPathComponent("v1/chat/completions"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let body: [String: Any] = ["messages": messages, "temperature": 0, "max_tokens": maxTokens,
+                                   "cache_prompt": true, "stream": true]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        return await withTaskGroup(of: String?.self) { g in
+            g.addTask {
+                guard let (bytes, resp) = try? await Self.streamSession.bytes(for: req),
+                      (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+                var out = ""
+                do {
+                    for try await line in bytes.lines {
+                        guard line.hasPrefix("data: ") else { continue }
+                        let payload = line.dropFirst(6)
+                        if payload == "[DONE]" { break }
+                        guard let o = try? JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: Any],
+                              let ch = (o["choices"] as? [[String: Any]])?.first else { continue }
+                        if let d = ch["delta"] as? [String: Any], let c = d["content"] as? String { out += c }
+                        if let fr = ch["finish_reason"] as? String, !fr.isEmpty { break }
+                    }
+                } catch { return nil }
+                return Task.isCancelled ? nil : out
+            }
+            g.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(max(0.05, timeout) * 1_000_000_000))
+                return nil
+            }
+            let first = await g.next() ?? nil
+            g.cancelAll()
+            return first
+        }
+    }
+
     func shutdown() {
         lock.lock(); defer { lock.unlock() }
         if let p = _process, p.isRunning { p.terminate() }

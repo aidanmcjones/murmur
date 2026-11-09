@@ -164,8 +164,9 @@ struct HistoryEntry: Codable {
     var llmMs: Int
     var totalMs: Int
     var spec: Bool? = nil
+    var mode: String? = nil
     enum CodingKeys: String, CodingKey {
-        case ts, raw, cleaned, app, spec
+        case ts, raw, cleaned, app, spec, mode
         case asrMs = "asr_ms", llmMs = "llm_ms", totalMs = "total_ms"
     }
 }

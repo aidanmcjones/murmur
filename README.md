@@ -29,24 +29,35 @@ Quit Wispr Flow or change its hotkey, otherwise both apps capture the same key.
 
 ## How it matches Wispr Flow (clean-room)
 
-Nothing was decompiled or copied from Wispr Flow. Its behaviour was matched black-box: `eval/` replays your own Wispr Flow history (the audio, raw transcript and formatted text that WF stores locally in `flow.sqlite`) through Murmur and scores the output against what WF produced. The clips are exported to `eval/data/`, which is gitignored.
+Nothing was decompiled or copied from Wispr Flow. Its behaviour was matched black-box: `eval/` replays your own Wispr Flow history (the audio, raw transcript and formatted text that WF stores locally in `flow.sqlite`) through Murmur and scores the output against what WF produced. Clips are exported to `eval/data*/`, which is gitignored.
 
-| Stage | Metric (80 of your clips) | Result |
+### November 2026 revision: accuracy and latency
+
+Measured on 250 held-out clips (not used for any tuning), against Wispr Flow's own output:
+
+| | WER vs WF transcript | Format-error vs WF output |
 |---|---|---|
-| ASR: whisper large-v3-turbo + vocab prompt | WER vs WF raw transcript | 5.2%, 0.26 s p50 |
-| Cleanup: qwen3:4b, given WF's own transcript | format-error vs WF output (raw passthrough = 8.6%) | **7.9%**, 0.47 s p50 |
-| Cleanup: qwen3:14b (optional, slower) | same | 6.5%, 1.8 s p50 |
-| Full Murmur binary | format-error vs WF output | **11.4%**, ~1.0 s wall (live: 0.75 s key-release → paste) |
+| Parakeet TDT v2 (old Fast engine) | 6.7% | 17.5% (ASR + deterministic cleanup) |
+| Whisper large-v3-turbo (Accurate) | 3.5% (210 ms p50) | |
+| **Parakeet Ultra (new default)** | **2.8% (47 ms p50)** | **12.9% full app, headless** |
+| WF's own transcript, passed through | 0% | 9.8% |
 
-Format-error is a token edit distance that counts case, punctuation and line breaks. Most of the remaining end-to-end gap is ASR word choice: WF runs a proprietary cloud ASR, and Murmur runs Whisper locally.
+Wispr Flow's measured release-to-paste latency on this Mac (its `e2eLatency` field, last 400 dictations): 322 ms p50, 530 ms p90.
 
-To reproduce:
+What changed and why:
+- **Engine:** Parakeet Ultra (`AsrModelVersion.ultra`) replaces v2. `defaults write com.aidanjones.murmur parakeetVersion v2` reverts.
+- **Dropped words:** the word-level background-speech gate deleted the speaker's own sentence-final words ("for me. You say" → "for say"). It is now off (`pkWordGate` re-enables it). A bare "▁" token no longer glues words together ("the11-hour").
+- **Cleanup LLM is gated:** the local 4B model was neutral-to-harmful for fidelity (it reworded, censored profanity and sometimes answered the dictation), so it now runs only when the transcript has self-corrections, fillers, spoken punctuation or repeats (~7% of dictations), behind a stricter output guard. Everything else gets deterministic cleanup with no LLM latency. `defaults write com.aidanjones.murmur alwaysLLM -bool true` restores the old behaviour.
+- **Latency:** cleanup requests stream, so cancelled speculative jobs stop the server immediately instead of queueing in front of the final request; after key release cleanup has a 0.9 s hard budget, past which the deterministic cleanup is pasted. A one-time migration moves the cleanup provider off Ollama, which reloaded its model after 30 min idle and hit the 4 s timeout.
+- Switching to Parakeet stops Murmur's Whisper server (1.6 GB).
+- `history.jsonl` records `mode` (`det`, `llm`, `timeout`) per dictation.
+
+To reproduce (scripts under `eval/`):
 ```
-python3 -I eval/export.py eval/data 80
-python3 -I eval/asr_eval.py eval/data 8178 eval/out/asr.json
-python3 -I eval/fmt_eval.py eval/data qwen3:4b-instruct-2507-q4_K_M wfasr eval/out/fmt.json
-python3 -I eval/swift_e2e.py eval/data build/Murmur.app/Contents/MacOS/Murmur eval/out/e2e.json
+python3 -I eval/export2.py eval/data2 250 eval/data/set.jsonl
+(cd eval/asrbench && swift build -c release); eval/asrbench/.build/release/asrbench eval/data2 eval/out - v2 ultra unified
+python3 -I eval/score_asr.py eval/data2 eval eval/out/asr_*.json
+python3 -I eval/cleanup_eval.py eval/data2 eval/out/asr_wfasr.json . 8179 eval/out/ce_wfasr.json
+python3 -I eval/swift_e2e.py eval/data2 build/Murmur.app/Contents/MacOS/Murmur eval/out/e2e.json
 ```
-Cleanup runs on Murmur's own llama.cpp server (port 8179, `models/qwen3-4b-instruct-2507-q4_K_M.gguf`) with the weights mlock'ed in RAM. Under heavy swap, ollama stalled for 5–10 s per request; this setup takes about 0.2–1 s. Murmur is signed with a local "Murmur Local Signing" certificate so macOS permission grants survive rebuilds.
-
-For higher fidelity, set the provider to Anthropic (Claude Haiku 5.5) and run `defaults write com.aidanjones.murmur ollamaModel qwen3:14b`, or run `fmt_eval.py` with `claude-haiku-5-5` and `ANTHROPIC_API_KEY` set to measure it.
+Cleanup runs on Murmur's own llama.cpp server (port 8179, `models/qwen3-4b-instruct-2507-q4_K_M.gguf`) with the weights mlock'ed in RAM. Murmur is signed with a local "Murmur Local Signing" certificate so macOS permission grants survive rebuilds.
