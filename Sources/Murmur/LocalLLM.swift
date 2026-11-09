@@ -1,7 +1,8 @@
 import Foundation
 
-/// Murmur-owned llama.cpp server for cleanup. Weights are mlock'ed so macOS can't page them
-/// out under memory pressure (the reason ollama stalled 5-10 s per request on this machine).
+/// Murmur-owned llama.cpp server for cleanup. Weights are no longer mlock'ed: wired memory hit macOS's
+/// global wire limit (with an 11 GB Ollama model loaded), and coreaudiod then could not wire the microphone
+/// buffer, so recording failed. Cleanup runs on ~7% of dictations and has a 0.9 s fallback, so a page-in is cheap.
 final class LocalLLM {
     static let shared = LocalLLM()
     static let port = 8179
@@ -58,7 +59,7 @@ final class LocalLLM {
         p.executableURL = URL(fileURLWithPath: "/bin/sh")
         p.arguments = ["-c", #"P=$PPID; "$0" "$@" & W=$!; trap 'kill $W 2>/dev/null; exit' TERM INT; while kill -0 $P 2>/dev/null && kill -0 $W 2>/dev/null; do sleep 1; done; kill $W 2>/dev/null"#,
                        exe, "-m", model, "--host", "127.0.0.1", "--port", "\(Self.port)", "-c", "4096",
-                       "-ngl", "99", "--load-mode", "mlock", "--jinja", "-np", "1",
+                       "-ngl", "99", "--jinja", "-np", "1",
                        // Prompt-lookup speculative decoding: cleanup output mostly copies the input,
                        // so n-gram drafts from the prompt are accepted often. Lossless at temp 0; ~35% faster.
                        "--spec-type", "ngram-simple", "--spec-ngram-simple-size-n", "2", "--spec-ngram-simple-size-m", "24"]

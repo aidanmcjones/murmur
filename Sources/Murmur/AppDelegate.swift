@@ -170,7 +170,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let app = NSWorkspace.shared.frontmostApplication
         ctx = AppContext(bundleId: app?.bundleIdentifier ?? "", appName: app?.localizedName ?? "", before: "")
         specReset()
-        guard recorder.start() else { DebugLog.log("beginRecording: recorder.start failed"); return false }
+        guard recorder.start() else {
+            DebugLog.log("beginRecording: recorder.start failed")
+            Toast.show(recorder.lastError ?? "Microphone failed to start", seconds: 4)
+            return false
+        }
         DebugLog.log("beginRecording ok app=\(ctx.bundleId)")
         probe = Task {
             await withCheckedContinuation { (k: CheckedContinuation<String, Never>) in

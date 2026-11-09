@@ -29,7 +29,9 @@ enum Resample {
 }
 
 final class AudioRecorder {
-    private let engine = AVAudioEngine()
+    private var engine = AVAudioEngine()
+    /// Last start failure, for the user-facing message.
+    private(set) var lastError: String?
     private let lock = NSLock()
     private var samples: [Float] = []
     private(set) var running = false
@@ -41,8 +43,15 @@ final class AudioRecorder {
     static let maxSeconds: TimeInterval = 360
     private var generation = 0
 
+    /// Starts capture; on failure rebuilds the engine (stale device/format after route changes) and retries once.
     func start() -> Bool {
         guard !running else { return true }
+        if startOnce() { return true }
+        engine = AVAudioEngine()
+        return startOnce()
+    }
+
+    private func startOnce() -> Bool {
         lock.lock(); samples.removeAll(keepingCapacity: true); lock.unlock()
         let input = engine.inputNode
         let fmt = input.outputFormat(forBus: 0)
@@ -59,6 +68,9 @@ final class AudioRecorder {
         }
         do { try engine.start() } catch {
             DebugLog.log("engine.start failed: \(error)")
+            lastError = (error as NSError).code == 2003329396
+                ? "macOS couldn't start the microphone (out of locked memory; large local models loaded?)"
+                : "Microphone failed to start (\((error as NSError).code))"
             input.removeTap(onBus: 0); return false
         }
         running = true
