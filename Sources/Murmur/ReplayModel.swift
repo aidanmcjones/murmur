@@ -256,6 +256,26 @@ struct ReplayModel {
         m = ReplayModel("hello")
         m.mouseDown(lookup: false)
         check("mouse-unresolvable", m.frozen == "mouse")
+        // Replace-everything flows: Cmd+A then typing leaves the model uncertain (frozen at the last known text).
+        m = run("one two", [.selectAll, .text("three")])
+        check("select-all-replace-uncertain", m.frozen == "select-all" && m.result == nil)
+        // Option/Command arrows with selection.
+        m = run("alpha beta gamma", [.move(.wordLeft, select: false), .move(.wordLeft, select: true), .text("B")])
+        check("shift-word-select-replace", m.result == "alpha Bgamma", "\(m.result ?? "nil")")
+        m = run("alpha beta", [.move(.wordLeft, select: true), .move(.wordLeft, select: true), .backspace])
+        check("shift-word-select-delete", m.result == "", "\(m.result ?? "nil")")
+        m = run("a\nbcd", [.move(.lineStart, select: true), .text("X")])
+        check("shift-line-select", m.result == "a\nX", "\(m.result ?? "nil")")
+        m = run("a\nbcd\ne", [.move(.left, select: false), .move(.left, select: false), .move(.left, select: false), .move(.lineEnd, select: false), .text("!")])
+        check("line-end", m.result == "a\nbcd!\ne", "\(m.result ?? "nil")")
+        m = run("hello world", [.move(.wordLeft, select: true), .move(.left, select: false), .text("_")])
+        check("left-collapses-selection", m.result == "hello _world", "\(m.result ?? "nil")")
+        m = run("don't stop", [.deleteWord, .deleteWord])
+        check("delete-word-apostrophe", m.result == "", "\(m.result ?? "nil")")
+        m = run("abc", [.text("d"), .undo, .text("e")])
+        check("undo-then-typing-ignored", m.result == nil && m.frozen == "undo")
+        m = run("abc", [.unsupported, .text("x")])
+        check("unsupported-key-freezes", m.frozen == "unsupported" && m.result == nil)
         // Event mapping.
         check("map-word-delete", event(code: 51, flags: .maskAlternate, chars: "") == .deleteWord)
         check("map-line-delete", event(code: 51, flags: .maskCommand, chars: "") == .deleteLine)
@@ -264,10 +284,10 @@ struct ReplayModel {
         check("map-char", event(code: 0, flags: [], chars: "k") == .text("k"))
         check("map-return", event(code: 36, flags: [], chars: "\r") == .unsupported)
         check("map-cmd-v", event(code: 9, flags: .maskCommand, chars: "v") == .unsupported)
-        // OCR: render text and recognise it with Vision (the capture step needs Screen Recording and is not exercised).
+        // OCR render (the capture step needs Screen Recording and is not exercised headlessly).
         if let img = ScreenOCR.render("take control of my Kolabtree tab"), let t = ScreenOCR.recognize(img) {
             check("ocr-render", t.lowercased().contains("control") && t.lowercased().contains("tab"), t)
         } else { check("ocr-render", false, "no result") }
-        return fails
+        return fails + ScreenOCR.selfTest()
     }
 }

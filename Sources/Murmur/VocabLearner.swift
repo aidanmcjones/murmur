@@ -327,7 +327,7 @@ enum VocabDiff {
         // Hand-written single-word replacement must not match fuzzily.
         let hand = Post.applyDictionary("say Colab tree", [DictEntry(phrase: "collab tree", replacement: "Kolabtree")])
         if hand == "say Colab tree" { print("PASS fuzzy-hand-written-exact-only") } else { fails += 1; print("FAIL fuzzy-hand-written: \(hand)") }
-        fails += Int(ReplayModel.selfTest())
+        fails += ReplayModel.selfTest() + AXRead.selfTest()
         print(fails == 0 ? "ALL PASS" : "\(fails) FAILED")
         return fails == 0 ? 0 : 1
     }
@@ -386,56 +386,14 @@ final class VocabLearner {
         return el
     }
 
-    private func stringAttr(_ el: AXUIElement, _ attr: String) -> String? {
-        var r: CFTypeRef?
-        return AXUIElementCopyAttributeValue(el, attr as CFString, &r) == .success ? r as? String : nil
-    }
-
-    private static let textRoles: Set<String> = ["AXTextArea", "AXTextField", "AXComboBox", "AXSearchField"]
-
-    /// Web areas / groups report focus on a container: walk down to the focused text area / field / contenteditable.
-    private func descendFocused(_ el: AXUIElement, depth: Int = 0) -> AXUIElement {
-        if let role = stringAttr(el, kAXRoleAttribute), Self.textRoles.contains(role) { return el }
-        guard depth < 6 else { return el }
-        var kids: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(el, kAXChildrenAttribute as CFString, &kids) == .success,
-              let arr = kids as? [AXUIElement] else { return el }
-        for k in arr.prefix(100) {
-            var f: CFTypeRef?
-            if AXUIElementCopyAttributeValue(k, kAXFocusedAttribute as CFString, &f) == .success, (f as? Bool) == true {
-                AXUIElementSetMessagingTimeout(k, 0.4)
-                return descendFocused(k, depth: depth + 1)
-            }
-        }
-        return el
-    }
-
     private func focusedTextElement(pid: pid_t) -> AXUIElement? {
-        focusedElement(pid: pid).map { descendFocused($0) }
+        guard let el = focusedElement(pid: pid) else { return nil }
+        return (AXRead.descendFocused(RealAX(el)) as? RealAX)?.el ?? el
     }
 
-    private func isSecure(_ el: AXUIElement) -> Bool {
-        for attr in [kAXRoleAttribute, kAXSubroleAttribute] where stringAttr(el, attr) == "AXSecureTextField" { return true }
-        return false
-    }
+    private func isSecure(_ el: AXUIElement) -> Bool { AXRead.isSecure(RealAX(el)) }
 
-    /// AXValue, falling back to AXStringForRange over AXNumberOfCharacters.
-    private func value(_ el: AXUIElement) -> String? {
-        var v: CFTypeRef?
-        if AXUIElementCopyAttributeValue(el, kAXValueAttribute as CFString, &v) == .success {
-            if let s = v as? String { return s }
-            if let a = v as? NSAttributedString { return a.string }
-        }
-        var n: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(el, kAXNumberOfCharactersAttribute as CFString, &n) == .success,
-              let count = (n as? NSNumber)?.intValue, count > 0, count <= Self.maxChars else { return nil }
-        var range = CFRange(location: 0, length: count)
-        guard let axr = AXValueCreate(.cfRange, &range) else { return nil }
-        var out: CFTypeRef?
-        guard AXUIElementCopyParameterizedAttributeValue(el, kAXStringForRangeParameterizedAttribute as CFString, axr, &out) == .success
-        else { return nil }
-        return out as? String
-    }
+    private func value(_ el: AXUIElement) -> String? { AXRead.value(RealAX(el), maxChars: Self.maxChars) }
 
     private func selectionRange(_ el: AXUIElement) -> CFRange? {
         var r: CFTypeRef?
