@@ -50,7 +50,7 @@ enum VocabDiff {
         return m == 0 ? 1 : 1 - Double(levenshtein(x, y)) / Double(m)
     }
 
-    private static func unknownToSpellChecker(_ w: String) -> Bool {
+    static func unknownToSpellChecker(_ w: String) -> Bool {
         NSSpellChecker.shared.checkSpelling(of: w, startingAt: 0, language: "en", wrap: false,
                                             inSpellDocumentWithTag: 0, wordCount: nil).location != NSNotFound
     }
@@ -113,7 +113,17 @@ enum VocabDiff {
             let ol = norm(old).count, nl = norm(new).count
             let sameFirst = norm(old).first == norm(new).first
             let lenRatio = Double(min(ol, nl)) / Double(max(1, max(ol, nl)))
-            guard sim >= 0.5 || (sameFirst && lenRatio >= 0.7) else { continue }
+            if !(sim >= 0.5 || (sameFirst && lenRatio >= 0.7)) {
+                // Loosened path: <=3 heard words by <=2 new tokens with extra evidence.
+                let strongOK = rb.count <= 2 && new.allSatisfy(strongVocab)
+                    && (phoneticSimilarity(old, new) >= 0.7 || initialismMatch(old, new)
+                        || (old.count == 1 && new.count == 1 && new[0].contains(where: { $0.isLetter })
+                            && unknownToSpellChecker(new[0])))
+                // A proper noun the ASR heard as a similar-sounding common word (known capitalised words need the sound match).
+                let properOK = old.count == 1 && new.count == 1 && (new[0].first?.isUppercase ?? false)
+                    && phoneticSimilarity(old, new) >= 0.65
+                guard strongOK || properOK else { continue }
+            }
             if rejected.contains(pairKey(heard, wanted)) { continue }
             if dictionary.contains(where: { $0.phrase.lowercased() == heard.lowercased()
                 && ($0.replacement ?? "").lowercased() == wanted.lowercased() }) { continue }
@@ -327,7 +337,7 @@ enum VocabDiff {
         // Hand-written single-word replacement must not match fuzzily.
         let hand = Post.applyDictionary("say Colab tree", [DictEntry(phrase: "collab tree", replacement: "Kolabtree")])
         if hand == "say Colab tree" { print("PASS fuzzy-hand-written-exact-only") } else { fails += 1; print("FAIL fuzzy-hand-written: \(hand)") }
-        fails += ReplayModel.selfTest() + AXRead.selfTest()
+        fails += ReplayModel.selfTest() + AXRead.selfTest() + ruleSelfTest()
         print(fails == 0 ? "ALL PASS" : "\(fails) FAILED")
         return fails == 0 ? 0 : 1
     }

@@ -2,6 +2,8 @@ import AppKit
 
 if CommandLine.arguments.contains("--learn-selftest") {
     exit(VocabDiff.selfTest())
+} else if CommandLine.arguments.contains("--learn-wfparity") {
+    exit(VocabDiff.wfParity())
 } else if let i = CommandLine.arguments.firstIndex(of: "--learn-test") {
     let a = CommandLine.arguments
     guard i + 2 < a.count else { FileHandle.standardError.write(Data("usage: --learn-test <pasted> <edited>\n".utf8)); exit(2) }
