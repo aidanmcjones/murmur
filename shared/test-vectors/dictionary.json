@@ -1,0 +1,745 @@
+[
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "btw",
+        "replacement" : "by the way"
+      }
+    ],
+    "expected" : "by the way I will be late",
+    "input" : "btw I will be late"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "btw",
+        "replacement" : "by the way"
+      }
+    ],
+    "expected" : "I will be late by the way",
+    "input" : "I will be late btw"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "btw",
+        "replacement" : "by the way"
+      }
+    ],
+    "expected" : "by the way call me",
+    "input" : "BTW call me"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "btw",
+        "replacement" : "by the way"
+      }
+    ],
+    "expected" : "the btwn key",
+    "input" : "the btwn key"
+  },
+  {
+    "before" : "Hello",
+    "entries" : [
+      {
+        "phrase" : "btw",
+        "replacement" : "by the way"
+      }
+    ],
+    "expected" : " by the way",
+    "input" : "btw"
+  },
+  {
+    "before" : "Hello ",
+    "entries" : [
+      {
+        "phrase" : "btw",
+        "replacement" : "by the way"
+      }
+    ],
+    "expected" : "by the way",
+    "input" : "btw"
+  },
+  {
+    "before" : "Hello\n",
+    "entries" : [
+      {
+        "phrase" : "btw",
+        "replacement" : "by the way"
+      }
+    ],
+    "expected" : "by the way",
+    "input" : "btw"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "my email",
+        "replacement" : "me@example.com"
+      }
+    ],
+    "expected" : "send it to me@example.com please",
+    "input" : "send it to my email please"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "my email",
+        "replacement" : "me@example.com"
+      }
+    ],
+    "expected" : "me@example.com, me@example.com",
+    "input" : "my email, my email"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "sig",
+        "replacement" : "Best regards,\nAlex"
+      }
+    ],
+    "expected" : "thanks Best regards,\nAlex",
+    "input" : "thanks sig"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "price",
+        "replacement" : "$5 & more"
+      }
+    ],
+    "expected" : "the $5 & more is low",
+    "input" : "the price is low"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "a.b",
+        "replacement" : "dot"
+      }
+    ],
+    "expected" : "dot and axb",
+    "input" : "a.b and axb"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "c++",
+        "replacement" : "cpp"
+      }
+    ],
+    "expected" : "I like cpp a lot",
+    "input" : "I like c++ a lot"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "Kolabtree",
+        "replacement" : null
+      }
+    ],
+    "expected" : "Kolabtree is a site",
+    "input" : "Kolabtree is a site"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "Kolabtree",
+        "replacement" : null
+      }
+    ],
+    "expected" : "kolabtree is a site",
+    "input" : "kolabtree is a site"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "",
+        "replacement" : "x"
+      }
+    ],
+    "expected" : "nothing happens",
+    "input" : "nothing happens"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "x",
+        "replacement" : ""
+      }
+    ],
+    "expected" : "x stays",
+    "input" : "x stays"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "x",
+        "replacement" : null
+      }
+    ],
+    "expected" : "x stays",
+    "input" : "x stays"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "one",
+        "replacement" : "1"
+      },
+      {
+        "phrase" : "two",
+        "replacement" : "2"
+      }
+    ],
+    "expected" : "1 plus 2",
+    "input" : "one plus two"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "one",
+        "replacement" : "two"
+      },
+      {
+        "phrase" : "two",
+        "replacement" : "three"
+      }
+    ],
+    "expected" : "three",
+    "input" : "one"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "cat",
+        "replacement" : "dog"
+      }
+    ],
+    "expected" : "dog category dog's concat",
+    "input" : "cat category cat's concat"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "ünï",
+        "replacement" : "uni"
+      }
+    ],
+    "expected" : "say uni now",
+    "input" : "say ünï now"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "hello world",
+        "replacement" : "hi"
+      }
+    ],
+    "expected" : "Hello   World again",
+    "input" : "Hello   World again"
+  },
+  {
+    "before" : "x",
+    "entries" : [
+      {
+        "phrase" : "hello world",
+        "replacement" : "hi"
+      }
+    ],
+    "expected" : " hi",
+    "input" : "hello world"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "collab tree",
+        "replacement" : "Kolabtree"
+      }
+    ],
+    "expected" : "take control of my Kolabtree tab",
+    "input" : "take control of my collab tree tab"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "collab tree",
+        "replacement" : "Kolabtree"
+      }
+    ],
+    "expected" : "take control of my Kolabtree tab",
+    "input" : "take control of my Collab Tree tab"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "collab tree",
+        "replacement" : "Kolabtree"
+      }
+    ],
+    "expected" : "take control of my Kolabtree tab",
+    "input" : "take control of my collab-tree tab"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "collab tree",
+        "replacement" : "Kolabtree"
+      }
+    ],
+    "expected" : "take control of my Kolabtree tab",
+    "input" : "take control of my colab tree tab"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "collab tree",
+        "replacement" : "Kolabtree"
+      }
+    ],
+    "expected" : "take control of my Kolabtree tab",
+    "input" : "take control of my collabtree tab"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "collab tree",
+        "replacement" : "Kolabtree"
+      }
+    ],
+    "expected" : "take control of my Kolabtree.",
+    "input" : "take control of my collab tree."
+  },
+  {
+    "before" : "see",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "collab tree",
+        "replacement" : "Kolabtree"
+      }
+    ],
+    "expected" : " Kolabtree",
+    "input" : "collab tree"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "collab tree",
+        "replacement" : "Kolabtree"
+      }
+    ],
+    "expected" : "Kolabtree Kolabtree",
+    "input" : "collab tree collab tree"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "collab tree",
+        "replacement" : "Kolabtree"
+      }
+    ],
+    "expected" : "collab trees are fun",
+    "input" : "collab trees are fun"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "collab tree",
+        "replacement" : "Kolabtree"
+      }
+    ],
+    "expected" : "the collaboration tree",
+    "input" : "the collaboration tree"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : false,
+        "phrase" : "kolab tree",
+        "replacement" : "Kolabtree"
+      }
+    ],
+    "expected" : "my colab tree tab",
+    "input" : "my colab tree tab"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "phrase" : "kolab tree",
+        "replacement" : "Kolabtree"
+      }
+    ],
+    "expected" : "my colab tree tab",
+    "input" : "my colab tree tab"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "kolab tree",
+        "replacement" : "Kolabtree"
+      }
+    ],
+    "expected" : "my colab tree tab",
+    "input" : "my colab tree tab"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "kolab tree",
+        "replacement" : "Kolabtree"
+      }
+    ],
+    "expected" : "my Kolabtree tab",
+    "input" : "my kolab tree tab"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "cooper netties",
+        "replacement" : "Kubernetes"
+      }
+    ],
+    "expected" : "deploy with cooper nettys now",
+    "input" : "deploy with cooper nettys now"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "cooper netties",
+        "replacement" : "Kubernetes"
+      }
+    ],
+    "expected" : "deploy with Kubernetes now",
+    "input" : "deploy with cooper-netties now"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "cooper netties",
+        "replacement" : "Kubernetes"
+      }
+    ],
+    "expected" : "deploy with cooper nettes now",
+    "input" : "deploy with cooper nettes now"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "cooper netties",
+        "replacement" : "Kubernetes"
+      }
+    ],
+    "expected" : "deploy with cooper now",
+    "input" : "deploy with cooper now"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "post gress",
+        "replacement" : "Postgres"
+      }
+    ],
+    "expected" : "open Postgres and Postgres",
+    "input" : "open post gress and postgress"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "post gress",
+        "replacement" : "Postgres"
+      }
+    ],
+    "expected" : "open Postgres",
+    "input" : "open post gres"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "fast api",
+        "replacement" : "FastAPI"
+      }
+    ],
+    "expected" : "use FastAPI or FastAPI or FastAPI",
+    "input" : "use Fast API or fastapi or fast-api"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "open ai",
+        "replacement" : "OpenAI"
+      }
+    ],
+    "expected" : "the OpenAI team",
+    "input" : "the open ai team"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "open ai",
+        "replacement" : "OpenAI"
+      }
+    ],
+    "expected" : "open air",
+    "input" : "open air"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "git hub",
+        "replacement" : "GitHub"
+      }
+    ],
+    "expected" : "on GitHub and GitHub",
+    "input" : "on git hub and github"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "abcd",
+        "replacement" : "ABCD"
+      }
+    ],
+    "expected" : "ABCD efgh",
+    "input" : "abcd efgh"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "a b c d e",
+        "replacement" : "ABCDE"
+      }
+    ],
+    "expected" : "ABCDE",
+    "input" : "a b c d e"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "one two three four",
+        "replacement" : "1234"
+      }
+    ],
+    "expected" : "1234",
+    "input" : "one two three four"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "zooxanthellae",
+        "replacement" : "Zooxanthellae"
+      }
+    ],
+    "expected" : "the zoanthellae live",
+    "input" : "the zoanthellae live"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "zoanthellae",
+        "replacement" : "zooxanthellae"
+      }
+    ],
+    "expected" : "the zooxanthellae live",
+    "input" : "the zoanthelae live"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "super base",
+        "replacement" : "Supabase"
+      }
+    ],
+    "expected" : "log in to Supabase",
+    "input" : "log in to superbase"
+  },
+  {
+    "before" : "Please ",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "super base",
+        "replacement" : "Supabase"
+      }
+    ],
+    "expected" : "log in to Supabase now",
+    "input" : "log in to super base now"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "collab tree",
+        "replacement" : "Kolabtree"
+      },
+      {
+        "phrase" : "btw",
+        "replacement" : "by the way"
+      }
+    ],
+    "expected" : "by the way my Kolabtree tab",
+    "input" : "btw my collab tree tab"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "kay tee",
+        "replacement" : "KT"
+      }
+    ],
+    "expected" : "ask KT",
+    "input" : "ask kay tee"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "quen",
+        "replacement" : "Qwen"
+      }
+    ],
+    "expected" : "the model Qwen is small",
+    "input" : "the model quen is small"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "quen",
+        "replacement" : "Qwen"
+      }
+    ],
+    "expected" : "the model queen is small",
+    "input" : "the model queen is small"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "mac os",
+        "replacement" : "macOS"
+      }
+    ],
+    "expected" : "on macOS and macOS",
+    "input" : "on Mac OS and macos"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "swift ui",
+        "replacement" : "SwiftUI"
+      }
+    ],
+    "expected" : "SwiftUI, SwiftUI, SwiftUI",
+    "input" : "swift-ui, swift ui, swiftui"
+  },
+  {
+    "before" : "",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "home brew",
+        "replacement" : "Homebrew"
+      }
+    ],
+    "expected" : "Homebrew works",
+    "input" : "Home Brew works"
+  },
+  {
+    "before" : "ok",
+    "entries" : [
+      {
+        "learned" : true,
+        "phrase" : "web hook",
+        "replacement" : "webhook"
+      }
+    ],
+    "expected" : " the webhook fires",
+    "input" : "the web hook fires"
+  }
+]
