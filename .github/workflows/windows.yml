@@ -132,6 +132,25 @@ jobs:
             ${{ runner.temp }}\appdata-headless
           if-no-files-found: ignore
 
+  pinned-release:
+    name: setup.ps1 (no arguments) against the published pinned release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~\AppData\Local\Murmur\models
+          key: ${{ env.MODELS_KEY }}
+      - name: scripts/setup.ps1 with the pinned tag and hash
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          ./scripts/setup.ps1 -NoLaunch
+          if ($LASTEXITCODE) { throw "setup.ps1 exit $LASTEXITCODE" }
+          & "$env:LOCALAPPDATA\Murmur\murmur.exe" --version
+          if (-not (Test-Path "$env:LOCALAPPDATA\Murmur\llama-server.exe")) { throw 'llama-server.exe missing' }
+
   release:
     name: GitHub release
     if: startsWith(github.ref, 'refs/tags/win-v')

@@ -139,16 +139,27 @@ pub fn ensure_running(max: Duration) -> bool {
         }
         *s = true;
     }
+    // A second attempt on a fresh port covers the rare case where the chosen port was taken before the child bound it
+    // (the child then exits and never becomes ready).
     let ok = (|| {
-        if !spawn() {
-            return false;
-        }
         let t0 = Instant::now();
-        while t0.elapsed() < max {
-            if is_ready() {
-                return true;
+        for _attempt in 0..2 {
+            if !spawn() {
+                return false;
             }
-            std::thread::sleep(Duration::from_millis(500));
+            while t0.elapsed() < max {
+                if is_ready() {
+                    return true;
+                }
+                if child_pid().is_none() {
+                    log("llm: llama-server exited before becoming ready; retrying on a new port");
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(500));
+            }
+            if child_pid().is_some() {
+                return false; // still loading but out of time: not a port problem
+            }
         }
         false
     })();

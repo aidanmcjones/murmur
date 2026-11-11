@@ -24,7 +24,7 @@
   Release pinning: $PinnedTag/$PinnedSha256 below name the one release this script installs, and the zip must match
   that hash (and the release's .sha256 asset, which must exist). After a `win-v*` tag is published, the windows
   workflow's release job prints the two new lines in its step summary; commit them here. Until the first release
-  is pinned, use -Tag with -ExpectedSha256, or -ZipPath.
+  is pinned, use -Tag with -ExpectedSha256, or -ZipPath. (win-v0.1.0 is pinned.)
 .PARAMETER ZipPath      Use a local murmur-win-x64.zip instead of downloading a release (used by CI).
 .PARAMETER SkipLlmModel Skip the 2.5 GB cleanup model (Murmur then uses deterministic cleanup only).
 #>
@@ -46,8 +46,8 @@ $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 # Pinned Windows release (update after each win-v* release, see the header).
-$PinnedTag = ''
-$PinnedSha256 = ''
+$PinnedTag = 'win-v0.1.0'
+$PinnedSha256 = '94445c5b702a87b9737c663910c2ecac439c560f73716f62323b08f9323b2737'
 
 $ParakeetUrl = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2'
 $ParakeetSize = 482440461
