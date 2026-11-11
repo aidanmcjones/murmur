@@ -1,0 +1,207 @@
+name: windows
+
+on:
+  push:
+    branches: [main]
+    tags: ['win-v*']
+    paths: ['windows/**', 'scripts/setup.ps1', '.github/workflows/windows.yml', 'Sources/Murmur/Resources/**', 'shared/**']
+  pull_request:
+    paths: ['windows/**', 'scripts/setup.ps1', '.github/workflows/windows.yml', 'Sources/Murmur/Resources/**', 'shared/**']
+  workflow_dispatch:
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+  MODELS_KEY: murmur-win-models-v1
+
+jobs:
+  core:
+    name: core tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows
+      - name: cargo test murmur-core (unit tests + parity with shared/test-vectors)
+        working-directory: windows
+        run: cargo test -p murmur-core
+
+  build:
+    name: build murmur.exe + package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows
+      - name: cargo build --release
+        working-directory: windows
+        run: cargo build --release -p murmur-win
+      - name: smoke test
+        working-directory: windows
+        shell: pwsh
+        run: |
+          $o = Start-Process -FilePath target\release\murmur.exe -ArgumentList '--version' -Wait -PassThru -NoNewWindow -RedirectStandardOutput v.txt
+          $v = (Get-Content -Raw v.txt)
+          Write-Host "version output: '$v'"
+          if ($o.ExitCode -ne 0 -or $v -notmatch 'murmur 0\.1\.0') { throw "murmur --version failed" }
+      - name: package zip
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./windows/package.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: murmur-win-x64
+          path: |
+            windows/dist/murmur-win-x64.zip
+            windows/dist/murmur-win-x64.zip.sha256
+
+  test:
+    name: setup.ps1 + headless transcribe + UI end-to-end
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: murmur-win-x64
+          path: dist
+      - name: restore model cache
+        id: models
+        uses: actions/cache/restore@v4
+        with:
+          path: ~\AppData\Local\Murmur\models
+          key: ${{ env.MODELS_KEY }}
+      - name: scripts/setup.ps1 against the zip built in this workflow
+        shell: pwsh
+        run: ./scripts/setup.ps1 -NoLaunch -ZipPath "$PWD\dist\murmur-win-x64.zip"
+      - name: save model cache
+        if: always() && steps.models.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~\AppData\Local\Murmur\models
+          key: ${{ env.MODELS_KEY }}
+      - name: setup.ps1 is idempotent (second run downloads nothing)
+        shell: pwsh
+        run: |
+          $t = Measure-Command { ./scripts/setup.ps1 -NoLaunch -ZipPath "$PWD\dist\murmur-win-x64.zip" -Startup }
+          Write-Host "second run took $($t.TotalSeconds) s"
+          if (-not (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run').Murmur) { throw 'startup entry missing' }
+          Get-ChildItem "$env:LOCALAPPDATA\Murmur" | Format-Table Name, Length
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Murmur.lnk")) { throw 'shortcut missing' }
+      - name: setup.ps1 real download + hash path (local mock release server)
+        shell: pwsh
+        run: ./windows/tests/setup-download.ps1 -Zip "$PWD\dist\murmur-win-x64.zip" -InstallDir "$env:LOCALAPPDATA\Murmur"
+      - name: synthesize speech (System.Speech)
+        shell: pwsh
+        run: ./windows/tests/make-wav.ps1 -Out "$env:RUNNER_TEMP\speech.wav"
+      - name: headless transcription (murmur.exe --transcribe)
+        shell: pwsh
+        env:
+          MURMUR_APPDATA: ${{ runner.temp }}\appdata-headless
+        run: ./windows/tests/transcribe.ps1 -Murmur "$env:LOCALAPPDATA\Murmur\murmur.exe" -Wav "$env:RUNNER_TEMP\speech.wav"
+      - name: UI end-to-end (Notepad, push-to-talk, UI Automation)
+        shell: pwsh
+        run: ./windows/tests/e2e.ps1 -Murmur "$env:LOCALAPPDATA\Murmur\murmur.exe" -Wav "$env:RUNNER_TEMP\speech.wav" -ModelsDir "$env:LOCALAPPDATA\Murmur\models"
+      - name: LLM cleanup through llama-server.exe (murmur.exe --llm-selftest)
+        shell: pwsh
+        run: |
+          $o = "$env:RUNNER_TEMP\llm.txt"
+          $p = Start-Process -FilePath "$env:LOCALAPPDATA\Murmur\murmur.exe" -ArgumentList '--llm-selftest' -Wait -PassThru -NoNewWindow -RedirectStandardOutput $o -RedirectStandardError "$env:RUNNER_TEMP\llm.err"
+          Get-Content "$env:RUNNER_TEMP\llm.err"
+          $t = (Get-Content -Raw $o).Trim()
+          Write-Host "cleaned: '$t'"
+          if ($p.ExitCode -ne 0) { throw "llm selftest exit $($p.ExitCode)" }
+          if ($t -notmatch '(?i)send me the file by friday') { throw "unexpected cleanup output: $t" }
+      - name: upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: |
+            e2e-appdata
+            ${{ runner.temp }}\appdata-headless
+          if-no-files-found: ignore
+
+  pinned-release:
+    name: setup.ps1 (no arguments) against the published pinned release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~\AppData\Local\Murmur\models
+          key: ${{ env.MODELS_KEY }}
+      - name: scripts/setup.ps1 with the pinned tag and hash
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          ./scripts/setup.ps1 -NoLaunch
+          if ($LASTEXITCODE) { throw "setup.ps1 exit $LASTEXITCODE" }
+          & "$env:LOCALAPPDATA\Murmur\murmur.exe" --version
+          if (-not (Test-Path "$env:LOCALAPPDATA\Murmur\llama-server.exe")) { throw 'llama-server.exe missing' }
+
+  release:
+    name: GitHub release
+    if: startsWith(github.ref, 'refs/tags/win-v')
+    needs: [core, build, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: murmur-win-x64
+          path: dist
+      - name: pin lines for scripts/setup.ps1
+        run: |
+          {
+            echo '### Pin this release in scripts/setup.ps1'
+            echo '```'
+            echo "\$PinnedTag = '${{ github.ref_name }}'"
+            echo "\$PinnedSha256 = '$(cut -d' ' -f1 dist/murmur-win-x64.zip.sha256)'"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/murmur-win-x64.zip dist/murmur-win-x64.zip.sha256 \
+            --repo "${{ github.repository }}" --title "Murmur for Windows ${{ github.ref_name }}" \
+            --notes "Windows build of Murmur. Install: run scripts/setup.ps1 (see README). Built and tested by the windows workflow." \
+            || gh release upload "${{ github.ref_name }}" dist/murmur-win-x64.zip dist/murmur-win-x64.zip.sha256 --clobber --repo "${{ github.repository }}"
+
+  verify-release:
+    name: setup.ps1 against the published release
+    if: startsWith(github.ref, 'refs/tags/win-v')
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: murmur-win-x64
+          path: dist
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~\AppData\Local\Murmur\models
+          key: ${{ env.MODELS_KEY }}
+      - name: install from the GitHub release
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $sha = ((Get-Content -Raw dist/murmur-win-x64.zip.sha256).Trim() -split '\s+')[0]
+          ./scripts/setup.ps1 -NoLaunch -Tag "${{ github.ref_name }}" -ExpectedSha256 $sha
+          & "$env:LOCALAPPDATA\Murmur\murmur.exe" --version
+          if (-not (Test-Path "$env:LOCALAPPDATA\Murmur\llama-server.exe")) { throw 'llama-server.exe missing' }
