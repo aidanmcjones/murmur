@@ -60,14 +60,14 @@ final class WhisperServer {
     private func startIfNeeded() async -> Bool {
         if await isUp() { return true }
         if let cur = process, cur.isRunning { return await waitUp(cur) }
-        guard let model = Self.modelPath() else {
-            FileHandle.standardError.write(Data("murmur: whisper model not found\n".utf8)); return false
+        guard let model = Self.modelPath(), let exe = Paths.binary("whisper-server") else {
+            FileHandle.standardError.write(Data("murmur: whisper model or whisper-server not found\n".utf8)); return false
         }
         let p = Process()
         // sh wrapper: the server dies when murmur does (even on SIGKILL) or when sh is terminated.
         p.executableURL = URL(fileURLWithPath: "/bin/sh")
         p.arguments = ["-c", #"P=$PPID; "$0" "$@" & W=$!; trap 'kill $W 2>/dev/null; exit' TERM INT; while kill -0 $P 2>/dev/null && kill -0 $W 2>/dev/null; do sleep 1; done; kill $W 2>/dev/null"#,
-                       "/opt/homebrew/bin/whisper-server", "-m", model, "--host", "127.0.0.1", "--port", "8178", "-t", "8"]
+                       exe, "-m", model, "--host", "127.0.0.1", "--port", "8178", "-t", "8"]
         if !FileManager.default.fileExists(atPath: Paths.whisperLog.path) {
             FileManager.default.createFile(atPath: Paths.whisperLog.path, contents: nil)
         }

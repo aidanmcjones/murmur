@@ -52,7 +52,7 @@ final class LocalLLM {
         if await isUp() { return true }
         if let cur = current(), cur.isRunning { return await waitUp(cur) }
         guard let model = Self.modelPath(),
-              let exe = ["/opt/homebrew/bin/llama-server", "/usr/local/bin/llama-server"].first(where: { FileManager.default.isExecutableFile(atPath: $0) })
+              let exe = Paths.binary("llama-server")
         else { FileHandle.standardError.write(Data("murmur: llama-server or cleanup model not found\n".utf8)); return false }
         let p = Process()
         // Same parent-death wrapper as whisper-server: the server exits when Murmur does.
