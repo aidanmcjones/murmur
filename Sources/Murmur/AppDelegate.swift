@@ -106,6 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         recorder.onLevel = { [weak self] v in self?.hud.level(v) }
         recorder.onBuffer = { [weak self] r, n in self?.specBuffer(rms: r, count: n) }
         recorder.onLimit = { [weak self] in self?.hotkey.reset(); self?.finishRecording() }
+        Settings.migrateHotkey()
         hotkey.onStart = { [weak self] in self?.beginRecording() ?? false }
         hotkey.onStop = { [weak self] in self?.finishRecording() }
         hotkey.onCancel = { [weak self] in self?.cancelRecording() }
@@ -184,7 +185,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         state = .recording
         startedAt = Date()
         setIcon(.recording)
-        hud.showRecording()
+        let started = startedAt
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            if let self, self.state == .recording, self.startedAt == started { self.hud.showRecording() }
+        }
         let c = ctx
         Task { await Cleanup.prewarm(bundleId: c.bundleId, name: c.appName) }
         return true
@@ -284,14 +288,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(prov)
         add(menu, "Set Anthropic key…", #selector(setKey))
 
-        let hk = NSMenuItem(title: "Hotkey", action: nil, keyEquivalent: "")
+        let hk = NSMenuItem(title: "Push-to-talk key", action: nil, keyEquivalent: "")
         let hs = NSMenu()
-        for (title, c) in [("Fn / Globe", HotkeyChoice.fn), ("Right Option", .rightOption)] {
-            let i = NSMenuItem(title: title, action: #selector(setHotkey(_:)), keyEquivalent: "")
-            i.target = self; i.representedObject = c.rawValue
-            i.state = Settings.hotkey == c ? .on : .off
-            hs.addItem(i)
-        }
+        let fnItem = NSMenuItem(title: "Use fn/🌐 key", action: #selector(toggleFn), keyEquivalent: "")
+        fnItem.target = self
+        fnItem.state = Settings.useFn ? .on : .off
+        hs.addItem(fnItem)
+        let cur = NSMenuItem(title: "Custom: " + (Settings.customKey.map { KeyInfo.name($0) } ?? "none"), action: nil, keyEquivalent: "")
+        cur.isEnabled = false
+        hs.addItem(cur)
+        let setItem = NSMenuItem(title: "Set custom key…", action: #selector(setCustomKey), keyEquivalent: "")
+        setItem.target = self
+        hs.addItem(setItem)
+        let clearItem = NSMenuItem(title: "Clear", action: #selector(clearCustomKey), keyEquivalent: "")
+        clearItem.target = self
+        clearItem.isEnabled = Settings.customKey != nil
+        hs.addItem(clearItem)
         hk.submenu = hs
         menu.addItem(hk)
         add(menu, "Disable Globe emoji popup", #selector(disableEmojiPopup))
@@ -346,8 +358,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let r = s.representedObject as? String, let p = Provider(rawValue: r) { Settings.provider = p }
     }
 
-    @objc private func setHotkey(_ s: NSMenuItem) {
-        if let r = s.representedObject as? String, let c = HotkeyChoice(rawValue: r) { Settings.hotkey = c; hotkey.reset() }
+    @objc private func toggleFn() {
+        Settings.useFn.toggle(); hotkey.reset()
+    }
+
+    @objc private func clearCustomKey() {
+        Settings.customKey = nil; hotkey.reset()
+    }
+
+    private var capturePanel: NSPanel?
+
+    @objc private func setCustomKey() {
+        capturePanel?.close()
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 460, height: 70),
+                            styleMask: [.titled, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.title = "Murmur"
+        panel.level = .floating
+        panel.isReleasedWhenClosed = false
+        let label = NSTextField(labelWithString: "Press a modifier (e.g. right ⌥ or right ⌘) or an F-key. Esc cancels.")
+        label.frame = NSRect(x: 20, y: 20, width: 420, height: 20)
+        label.alignment = .center
+        panel.contentView?.addSubview(label)
+        panel.center()
+        panel.orderFrontRegardless()
+        capturePanel = panel
+        hotkey.reset()
+        hotkey.capture = { [weak self, weak panel] code in
+            panel?.close()
+            guard let code else { DebugLog.log("capture cancelled"); return }
+            DebugLog.log("capture set custom key code=\(code)")
+            Settings.customKey = code
+            self?.hotkey.reset()
+            Toast.show("Push-to-talk key: \(KeyInfo.name(code))")
+        }
     }
 
     @objc private func setKey() {

@@ -36,8 +36,20 @@ enum AsrEngine: String {
     case fast, accurate
 }
 
-enum HotkeyChoice: String {
-    case fn, rightOption
+/// Keycodes + device-dependent flag bits for modifier keys, so left/right are distinguishable.
+enum KeyInfo {
+    static let modifierBits: [Int: UInt64] = [
+        61: 0x40, 54: 0x10, 62: 0x2000, 60: 0x04,
+        58: 0x20, 55: 0x08, 59: 0x01, 56: 0x02,
+    ]
+    static let names: [Int: String] = [
+        61: "Right Option", 54: "Right Command", 62: "Right Control", 60: "Right Shift",
+        58: "Left Option", 55: "Left Command", 59: "Left Control", 56: "Left Shift",
+        122: "F1", 120: "F2", 99: "F3", 118: "F4", 96: "F5", 97: "F6", 98: "F7", 100: "F8",
+        101: "F9", 109: "F10", 103: "F11", 111: "F12", 105: "F13", 107: "F14", 113: "F15",
+        106: "F16", 64: "F17", 79: "F18", 80: "F19", 90: "F20",
+    ]
+    static func name(_ code: Int) -> String { names[code] ?? "Key \(code)" }
 }
 
 enum Settings {
@@ -49,9 +61,24 @@ enum Settings {
         get { AsrEngine(rawValue: UserDefaults.standard.string(forKey: "asrEngine") ?? "") ?? .fast }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "asrEngine") }
     }
-    static var hotkey: HotkeyChoice {
-        get { HotkeyChoice(rawValue: UserDefaults.standard.string(forKey: "hotkey") ?? "") ?? .fn }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: "hotkey") }
+    static var useFn: Bool {
+        get { UserDefaults.standard.object(forKey: "useFn") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "useFn") }
+    }
+    /// Optional extra push-to-talk key (virtual keycode); nil = none.
+    static var customKey: Int? {
+        get { UserDefaults.standard.object(forKey: "customKeyCode") as? Int }
+        set {
+            if let v = newValue { UserDefaults.standard.set(v, forKey: "customKeyCode") }
+            else { UserDefaults.standard.removeObject(forKey: "customKeyCode") }
+        }
+    }
+    /// Old single-choice `hotkey` setting -> custom key.
+    static func migrateHotkey() {
+        let d = UserDefaults.standard
+        guard let old = d.string(forKey: "hotkey") else { return }
+        if old == "rightOption", customKey == nil { customKey = 61 }
+        d.removeObject(forKey: "hotkey")
     }
 }
 
