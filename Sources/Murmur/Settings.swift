@@ -4,11 +4,20 @@ import SQLite3
 
 enum Paths {
     static let support: URL = {
-        let u = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Murmur")
+        // MURMUR_SUPPORT_DIR overrides the data folder (used by setup tests and CI).
+        let u = ProcessInfo.processInfo.environment["MURMUR_SUPPORT_DIR"].map { URL(fileURLWithPath: $0) }
+            ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Murmur")
         try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
         return u
     }()
+    /// Helper executables (llama-server, whisper-server): app bundle, then Murmur's own bin folder, then Homebrew.
+    static func binary(_ name: String) -> String? {
+        var dirs: [String] = []
+        if let r = Bundle.main.resourceURL { dirs.append(r.appendingPathComponent("bin").path) }
+        dirs.append(support.appendingPathComponent("bin").path)
+        dirs += ["/opt/homebrew/bin", "/usr/local/bin"]
+        return dirs.map { $0 + "/" + name }.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
     static var dictionary: URL { support.appendingPathComponent("dictionary.json") }
     static var history: URL { support.appendingPathComponent("history.jsonl") }
     static var parakeetLog: URL { support.appendingPathComponent("parakeet.log") }

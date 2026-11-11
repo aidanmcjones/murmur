@@ -6,6 +6,16 @@ if CommandLine.arguments.contains("--learn-selftest") {
     let dir = CommandLine.arguments[i + 1]
     Task { exit(await ParakeetEngine.boostEval(dir: dir)) }
     dispatchMain()
+} else if let i = CommandLine.arguments.firstIndex(of: "--clean-text"), i + 1 < CommandLine.arguments.count {
+    let a = CommandLine.arguments
+    var bid = ""
+    if let j = a.firstIndex(of: "--bundle-id"), j + 1 < a.count { bid = a[j + 1] }
+    print(TestVectors.cleanText(a[i + 1], bundleId: bid))
+    exit(0)
+} else if let i = CommandLine.arguments.firstIndex(of: "--dump-test-vectors"), i + 1 < CommandLine.arguments.count {
+    exit(TestVectors.dump(dir: CommandLine.arguments[i + 1]))
+} else if let i = CommandLine.arguments.firstIndex(of: "--check-test-vectors"), i + 1 < CommandLine.arguments.count {
+    exit(TestVectors.check(dir: CommandLine.arguments[i + 1]))
 } else if CommandLine.arguments.contains("--learn-wfparity") {
     exit(VocabDiff.wfParity())
 } else if let i = CommandLine.arguments.firstIndex(of: "--learn-test") {

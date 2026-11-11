@@ -1,0 +1,1912 @@
+[
+  {
+    "edited" : "take control of my Kolabtree tab",
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "kind" : "candidate",
+    "pasted" : "take control of my collab tree tab"
+  },
+  {
+    "edited" : "ask zooxanthellae experts",
+    "expected" : {
+      "heard" : "zoanthellae",
+      "wanted" : "zooxanthellae"
+    },
+    "kind" : "candidate",
+    "pasted" : "ask zoanthellae experts"
+  },
+  {
+    "edited" : "we deploy with Kubernetes today",
+    "expected" : {
+      "heard" : "cooper netties",
+      "wanted" : "Kubernetes"
+    },
+    "kind" : "candidate",
+    "pasted" : "we deploy with cooper netties today"
+  },
+  {
+    "edited" : "open the PostgreSQL database",
+    "expected" : {
+      "heard" : "post gress",
+      "wanted" : "PostgreSQL"
+    },
+    "kind" : "candidate",
+    "pasted" : "open the post gress database"
+  },
+  {
+    "edited" : "send it to Johnathan",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "send it to john"
+  },
+  {
+    "edited" : "I use FastAPI for this",
+    "expected" : {
+      "heard" : "fast api",
+      "wanted" : "FastAPI"
+    },
+    "kind" : "candidate",
+    "pasted" : "I use fast api for this"
+  },
+  {
+    "edited" : "talk to the OpenAI team",
+    "expected" : {
+      "heard" : "open ai",
+      "wanted" : "OpenAI"
+    },
+    "kind" : "candidate",
+    "pasted" : "talk to the open ai team"
+  },
+  {
+    "edited" : "run the GitHub action",
+    "expected" : {
+      "heard" : "git hub",
+      "wanted" : "GitHub"
+    },
+    "kind" : "candidate",
+    "pasted" : "run the git hub action"
+  },
+  {
+    "edited" : "meet with Sara at noon",
+    "expected" : {
+      "heard" : "sarah",
+      "wanted" : "Sara"
+    },
+    "kind" : "candidate",
+    "pasted" : "meet with sarah at noon"
+  },
+  {
+    "edited" : "the model is called Qwen",
+    "expected" : {
+      "heard" : "quen",
+      "wanted" : "Qwen"
+    },
+    "kind" : "candidate",
+    "pasted" : "the model is called quen"
+  },
+  {
+    "edited" : "try SwiftUI for the view",
+    "expected" : {
+      "heard" : "swift ui",
+      "wanted" : "SwiftUI"
+    },
+    "kind" : "candidate",
+    "pasted" : "try swift ui for the view"
+  },
+  {
+    "edited" : "install Homebrew first",
+    "expected" : {
+      "heard" : "home brew",
+      "wanted" : "Homebrew"
+    },
+    "kind" : "candidate",
+    "pasted" : "install home brew first"
+  },
+  {
+    "edited" : "use the llama.cpp server",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "use the llama cpp server"
+  },
+  {
+    "edited" : "check the ESLint config",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "check the e s l int config"
+  },
+  {
+    "edited" : "we need an NGINX proxy",
+    "expected" : {
+      "heard" : "a nginx",
+      "wanted" : "an NGINX"
+    },
+    "kind" : "candidate",
+    "pasted" : "we need a nginx proxy"
+  },
+  {
+    "edited" : "ping the webhook",
+    "expected" : {
+      "heard" : "web hook",
+      "wanted" : "webhook"
+    },
+    "kind" : "candidate",
+    "pasted" : "ping the web hook"
+  },
+  {
+    "edited" : "ask Dr. Smith",
+    "expected" : {
+      "heard" : "doctor smith",
+      "wanted" : "Dr Smith"
+    },
+    "kind" : "candidate",
+    "pasted" : "ask doctor smith"
+  },
+  {
+    "edited" : "it works in Chrome",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "it works in chrome"
+  },
+  {
+    "edited" : "the meeting starts at noon sharp",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "the meeting is at noon"
+  },
+  {
+    "edited" : "I receive the mail",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "I recieve the mail"
+  },
+  {
+    "edited" : "this is a test",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "this is a test"
+  },
+  {
+    "edited" : "please send the report tomorrow",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "please send the report today"
+  },
+  {
+    "edited" : "we should probably leave right now",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "we should go now"
+  },
+  {
+    "edited" : "goodbye world",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "hello world"
+  },
+  {
+    "edited" : "the dog ran away",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "the cat sat down"
+  },
+  {
+    "edited" : "",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "short note"
+  },
+  {
+    "edited" : "something new",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : ""
+  },
+  {
+    "edited" : "add the thing here, please.",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "add the thing here"
+  },
+  {
+    "edited" : "it is great",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "it is good"
+  },
+  {
+    "edited" : "buy milk, eggs and bread",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "buy milk and eggs"
+  },
+  {
+    "edited" : "The quick brown fox",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "the quick brown fox"
+  },
+  {
+    "edited" : "see you Monday",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "see you monday"
+  },
+  {
+    "edited" : "we met in Paris",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "we met in paris"
+  },
+  {
+    "edited" : "let's go",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "lets go"
+  },
+  {
+    "edited" : "I think it's fine",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "I think its fine"
+  },
+  {
+    "edited" : "a b c d e g",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "a b c d e f"
+  },
+  {
+    "edited" : "one two four five",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "one two three four five"
+  },
+  {
+    "edited" : "alpha beta gamma delta",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "alpha beta gamma"
+  },
+  {
+    "edited" : "deploy to PROD now",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "deploy to prod now"
+  },
+  {
+    "edited" : "use TanStack Query here",
+    "expected" : {
+      "heard" : "react query",
+      "wanted" : "TanStack Query"
+    },
+    "kind" : "candidate",
+    "pasted" : "use react query here"
+  },
+  {
+    "edited" : "ask KT about it",
+    "expected" : {
+      "heard" : "kay tee",
+      "wanted" : "KT"
+    },
+    "kind" : "candidate",
+    "pasted" : "ask kay tee about it"
+  },
+  {
+    "edited" : "the Zed editor is fast",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "the zed editor is fast"
+  },
+  {
+    "edited" : "grab some PyTorch docs",
+    "expected" : {
+      "heard" : "pie torch",
+      "wanted" : "PyTorch"
+    },
+    "kind" : "candidate",
+    "pasted" : "grab some pie torch docs"
+  },
+  {
+    "edited" : "open the Xcode project",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "open the xcode project"
+  },
+  {
+    "edited" : "run pytest again",
+    "expected" : {
+      "heard" : "pee test",
+      "wanted" : "pytest"
+    },
+    "kind" : "candidate",
+    "pasted" : "run pee test again"
+  },
+  {
+    "edited" : "say hi to Bob",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "say hi to bob"
+  },
+  {
+    "edited" : "call Mr. Tanaka",
+    "expected" : {
+      "heard" : "mister tanaka",
+      "wanted" : "Mr Tanaka"
+    },
+    "kind" : "candidate",
+    "pasted" : "call mister tanaka"
+  },
+  {
+    "edited" : "see the README",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "see the readme"
+  },
+  {
+    "edited" : "push to origin develop",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "push to origin main"
+  },
+  {
+    "edited" : "it costs 5 dollars",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "it costs five dollars"
+  },
+  {
+    "edited" : "thanks so much",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "thanks a lot"
+  },
+  {
+    "edited" : "we use Terraform for infra",
+    "expected" : {
+      "heard" : "terra form",
+      "wanted" : "Terraform"
+    },
+    "kind" : "candidate",
+    "pasted" : "we use terra form for infra"
+  },
+  {
+    "edited" : "check with Ansible later",
+    "expected" : {
+      "heard" : "ansible",
+      "wanted" : "Ansible"
+    },
+    "kind" : "candidate",
+    "pasted" : "check with ansible later"
+  },
+  {
+    "edited" : "welcome to the Jungle Gym",
+    "expected" : {
+      "heard" : "jungle",
+      "wanted" : "Jungle Gym"
+    },
+    "kind" : "candidate",
+    "pasted" : "welcome to the jungle"
+  },
+  {
+    "edited" : "the whisper.cpp build",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "the whisper cpp build"
+  },
+  {
+    "edited" : "read the SvelteKit docs",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "read the sveltekit docs"
+  },
+  {
+    "edited" : "log in to Supabase",
+    "expected" : {
+      "heard" : "super base",
+      "wanted" : "Supabase"
+    },
+    "kind" : "candidate",
+    "pasted" : "log in to super base"
+  },
+  {
+    "edited" : "the yarn.lock file",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "the yarn lock file"
+  },
+  {
+    "edited" : "ship it on Friday",
+    "expected" : {
+      "heard" : "friday",
+      "wanted" : "on Friday"
+    },
+    "kind" : "candidate",
+    "pasted" : "ship it friday"
+  },
+  {
+    "edited" : "my name is Aidan",
+    "expected" : {
+      "heard" : "aiden",
+      "wanted" : "Aidan"
+    },
+    "kind" : "candidate",
+    "pasted" : "my name is aiden"
+  },
+  {
+    "edited" : "hey Siri",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "hey siri"
+  },
+  {
+    "edited" : "open Obsidian notes",
+    "expected" : null,
+    "kind" : "candidate",
+    "pasted" : "open obsidian notes"
+  },
+  {
+    "events" : [
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "Kolabtree",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my Kolabtree tab"
+  },
+  {
+    "events" : [
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "K",
+        "type" : "text"
+      },
+      {
+        "text" : "o",
+        "type" : "text"
+      },
+      {
+        "text" : "l",
+        "type" : "text"
+      },
+      {
+        "text" : "a",
+        "type" : "text"
+      },
+      {
+        "text" : "b",
+        "type" : "text"
+      },
+      {
+        "text" : "t",
+        "type" : "text"
+      },
+      {
+        "text" : "r",
+        "type" : "text"
+      },
+      {
+        "text" : "e",
+        "type" : "text"
+      },
+      {
+        "text" : "e",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my Kolabtree tab"
+  },
+  {
+    "events" : [
+      {
+        "type" : "delete_word"
+      },
+      {
+        "text" : "John",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "send it to john",
+    "result" : "send it to John"
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "type" : "delete_word"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "one two three",
+    "result" : "one three"
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "word_right",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "text" : "Kolab",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab",
+      "wanted" : "Kolab"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my Kolab tree tab"
+  },
+  {
+    "events" : [
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "text" : "Kolabtree",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my Kolabtree tab"
+  },
+  {
+    "events" : [
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "type" : "forward_delete"
+      },
+      {
+        "move" : "right",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "text" : "X",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "abcd",
+      "wanted" : "abdX"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "abcd",
+    "result" : "abdX"
+  },
+  {
+    "events" : [
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "undo"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "undo",
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "c",
+        "type" : "text"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "text" : "zzz",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "boundary",
+    "kind" : "replay",
+    "pasted" : "ab",
+    "result" : "ac"
+  },
+  {
+    "events" : [
+      {
+        "move" : "line_start",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "text" : "X",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "b",
+      "wanted" : "Xb"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "a\nb c",
+    "result" : "a\nXb c"
+  },
+  {
+    "events" : [
+      {
+        "type" : "delete_line"
+      },
+      {
+        "text" : "Z",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "a\nb c",
+    "result" : "a\nZ"
+  },
+  {
+    "events" : [
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "select_all"
+      },
+      {
+        "text" : "q",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "tab",
+      "wanted" : "ta"
+    },
+    "frozen" : "select-all",
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my collab tree ta"
+  },
+  {
+    "events" : [
+      {
+        "type" : "select_all"
+      },
+      {
+        "text" : "three",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "select-all",
+    "kind" : "replay",
+    "pasted" : "one two",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "word_left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "text" : "B",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "beta gamma",
+      "wanted" : "Bgamma"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "alpha beta gamma",
+    "result" : "alpha Bgamma"
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "word_left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "type" : "backspace"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "alpha beta",
+    "result" : ""
+  },
+  {
+    "events" : [
+      {
+        "move" : "line_start",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "text" : "X",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "a\nbcd",
+    "result" : "a\nX"
+  },
+  {
+    "events" : [
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "line_end",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "text" : "!",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "a\nbcd\ne",
+    "result" : "a\nbcd!\ne"
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "text" : "_",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "hello world",
+    "result" : "hello _world"
+  },
+  {
+    "events" : [
+      {
+        "type" : "delete_word"
+      },
+      {
+        "type" : "delete_word"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "don't stop",
+    "result" : ""
+  },
+  {
+    "events" : [
+      {
+        "text" : "d",
+        "type" : "text"
+      },
+      {
+        "type" : "undo"
+      },
+      {
+        "text" : "e",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "undo",
+    "kind" : "replay",
+    "pasted" : "abc",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "type" : "unsupported"
+      },
+      {
+        "text" : "x",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "unsupported",
+    "kind" : "replay",
+    "pasted" : "abc",
+    "result" : null
+  },
+  {
+    "events" : [
+
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "hello",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "o",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "hello",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "p!",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "hello",
+    "result" : "help!"
+  },
+  {
+    "events" : [
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "there",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "hello world",
+    "result" : "hello there"
+  },
+  {
+    "events" : [
+      {
+        "type" : "delete_word"
+      },
+      {
+        "text" : "planet",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "hello world",
+    "result" : "hello planet"
+  },
+  {
+    "events" : [
+      {
+        "type" : "delete_word"
+      },
+      {
+        "type" : "delete_word"
+      },
+      {
+        "text" : "bye",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "hello world",
+    "result" : "bye"
+  },
+  {
+    "events" : [
+      {
+        "type" : "delete_word"
+      },
+      {
+        "text" : "Monday",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "see you monday",
+    "result" : "see you Monday"
+  },
+  {
+    "events" : [
+      {
+        "type" : "delete_word"
+      },
+      {
+        "text" : "Paris",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "we met in paris",
+    "result" : "we met in Paris"
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "type" : "delete_word"
+      },
+      {
+        "text" : "2",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "two three",
+      "wanted" : "2three"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "one two three four",
+    "result" : "one 2three four"
+  },
+  {
+    "events" : [
+      {
+        "move" : "line_start",
+        "select" : false,
+        "type" : "move"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "boundary",
+    "kind" : "replay",
+    "pasted" : "abc",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "type" : "forward_delete"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "boundary",
+    "kind" : "replay",
+    "pasted" : "abc",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "type" : "forward_delete"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "abc",
+    "result" : "ab"
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "text" : "X ",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "abc def",
+    "result" : "abc X def"
+  },
+  {
+    "events" : [
+      {
+        "type" : "backspace"
+      }
+    ],
+    "expected" : {
+      "heard" : "stop",
+      "wanted" : "sto"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "tab\tstop",
+    "result" : "tab\tsto"
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "-",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "emoji 😀 here",
+    "result" : "emoji 😀-here"
+  },
+  {
+    "events" : [
+      {
+        "type" : "delete_line"
+      },
+      {
+        "text" : "line 2",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "line one\nline two",
+    "result" : "line one\nline 2"
+  },
+  {
+    "events" : [
+      {
+        "type" : "select_all"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "select-all",
+    "kind" : "replay",
+    "pasted" : "hello",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "type" : "unsupported"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "unsupported",
+    "kind" : "replay",
+    "pasted" : "hello",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "text" : "!",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "hello",
+    "result" : "hello!"
+  },
+  {
+    "events" : [
+      {
+        "move" : "left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "text" : "LD",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "hello world",
+    "result" : "hello worLD"
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "word_right",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "the",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "fix teh typo",
+    "result" : "fix the typo"
+  },
+  {
+    "events" : [
+      {
+        "type" : "delete_word"
+      },
+      {
+        "text" : "Aidan",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "aiden",
+      "wanted" : "Aidan"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "name is aiden",
+    "result" : "name is Aidan"
+  },
+  {
+    "events" : [
+      {
+        "type" : "delete_word"
+      },
+      {
+        "type" : "delete_word"
+      },
+      {
+        "text" : "TanStack Query",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "react query",
+      "wanted" : "TanStack Query"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "use react query",
+    "result" : "use TanStack Query"
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "right",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "text" : "c",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "ab",
+    "result" : "abc"
+  },
+  {
+    "events" : [
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "y",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "boundary",
+    "kind" : "replay",
+    "pasted" : "x",
+    "result" : ""
+  },
+  {
+    "events" : [
+      {
+        "type" : "delete_word"
+      },
+      {
+        "type" : "undo"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "undo",
+    "kind" : "replay",
+    "pasted" : "alpha",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "move" : "line_start",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "type" : "backspace"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "one\ntwo\nthree",
+    "result" : "one\ntwo\n"
+  },
+  {
+    "events" : [
+      {
+        "move" : "line_start",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "text" : "3",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "one\ntwo\nthree",
+    "result" : "one\ntwo\n3"
+  },
+  {
+    "events" : [
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "world",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "hello",
+    "result" : "world"
+  },
+  {
+    "events" : [
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "world",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "boundary",
+    "kind" : "replay",
+    "pasted" : "hello",
+    "result" : ""
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "text" : "c ",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "a b",
+    "result" : "a c b"
+  },
+  {
+    "events" : [
+      {
+        "type" : "delete_word"
+      },
+      {
+        "type" : "delete_word"
+      },
+      {
+        "text" : "Kolabtree",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "kolab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "kolab tree",
+    "result" : "Kolabtree"
+  },
+  {
+    "events" : [
+      {
+        "type" : "delete_line"
+      },
+      {
+        "text" : "Kolabtree",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "line-boundary",
+    "kind" : "replay",
+    "pasted" : "kolab tree",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "type" : "delete_word"
+      },
+      {
+        "text" : "A ",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "the end",
+    "result" : "A end"
+  },
+  {
+    "events" : [
+      {
+        "move" : "left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "text" : "o",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "one two",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "2",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "one two",
+    "result" : "one 2"
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "word_left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "text" : "1 2",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "one two",
+    "result" : "1 2"
+  },
+  {
+    "events" : [
+      {
+        "text" : "",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "copy me",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "é",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "café menu",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "orld",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "hello wrld",
+    "result" : "hello world"
+  }
+]

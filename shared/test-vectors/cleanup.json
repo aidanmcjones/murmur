@@ -1,0 +1,401 @@
+[
+  {
+    "bundle_id" : "com.apple.TextEdit",
+    "expected" : "So I think we should go",
+    "input" : "um so I think we should go",
+    "needs_llm" : true,
+    "style" : "default"
+  },
+  {
+    "bundle_id" : "com.tinyspeck.slackmacgap",
+    "expected" : "I will call you tomorrow",
+    "input" : "uh I will call you tomorrow",
+    "needs_llm" : true,
+    "style" : "messaging"
+  },
+  {
+    "bundle_id" : "com.apple.mail",
+    "expected" : "So the meeting is at noon",
+    "input" : "so um the meeting is at noon",
+    "needs_llm" : true,
+    "style" : "email"
+  },
+  {
+    "bundle_id" : "com.apple.Terminal",
+    "expected" : "Well, maybe later",
+    "input" : "well, uh, maybe later",
+    "needs_llm" : true,
+    "style" : "ai"
+  },
+  {
+    "bundle_id" : "com.example.Unknown",
+    "expected" : "I am not sure about that",
+    "input" : "erm I am not sure about that",
+    "needs_llm" : false,
+    "style" : "default"
+  },
+  {
+    "bundle_id" : "com.microsoft.VSCode",
+    "expected" : "That looks right to me",
+    "input" : "hmm that looks right to me",
+    "needs_llm" : false,
+    "style" : "ai"
+  },
+  {
+    "bundle_id" : "com.hnc.Discord",
+    "expected" : "Let me check the file",
+    "input" : "umm let me check the file",
+    "needs_llm" : true,
+    "style" : "messaging"
+  },
+  {
+    "bundle_id" : "com.apple.Notes",
+    "expected" : "Okay sounds good",
+    "input" : "uhh okay sounds good",
+    "needs_llm" : true,
+    "style" : "email"
+  },
+  {
+    "bundle_id" : "com.apple.TextEdit",
+    "expected" : "I need to finish this",
+    "input" : "I um need to uh finish this",
+    "needs_llm" : true,
+    "style" : "default"
+  },
+  {
+    "bundle_id" : "com.tinyspeck.slackmacgap",
+    "expected" : "Thanks for the update",
+    "input" : "um, uh, thanks for the update",
+    "needs_llm" : true,
+    "style" : "messaging"
+  },
+  {
+    "bundle_id" : "com.apple.mail",
+    "expected" : "The report is done",
+    "input" : "the report is done um",
+    "needs_llm" : true,
+    "style" : "email"
+  },
+  {
+    "bundle_id" : "com.apple.Terminal",
+    "expected" : "The test passed",
+    "input" : "Um. The test passed",
+    "needs_llm" : true,
+    "style" : "ai"
+  },
+  {
+    "bundle_id" : "com.example.Unknown",
+    "expected" : "I think so",
+    "input" : "I I think so",
+    "needs_llm" : true,
+    "style" : "default"
+  },
+  {
+    "bundle_id" : "com.microsoft.VSCode",
+    "expected" : "We should leave",
+    "input" : "we we we should leave",
+    "needs_llm" : true,
+    "style" : "ai"
+  },
+  {
+    "bundle_id" : "com.hnc.Discord",
+    "expected" : "The report is ready",
+    "input" : "the the report is ready",
+    "needs_llm" : true,
+    "style" : "messaging"
+  },
+  {
+    "bundle_id" : "com.apple.Notes",
+    "expected" : "That is correct",
+    "input" : "that is is correct",
+    "needs_llm" : true,
+    "style" : "email"
+  },
+  {
+    "bundle_id" : "com.apple.TextEdit",
+    "expected" : "Go",
+    "input" : "go go go",
+    "needs_llm" : true,
+    "style" : "default"
+  },
+  {
+    "bundle_id" : "com.tinyspeck.slackmacgap",
+    "expected" : "No I mean yes",
+    "input" : "no no I mean yes",
+    "needs_llm" : true,
+    "style" : "messaging"
+  },
+  {
+    "bundle_id" : "com.apple.mail",
+    "expected" : "This has been fixed",
+    "input" : "this has has been fixed",
+    "needs_llm" : true,
+    "style" : "email"
+  },
+  {
+    "bundle_id" : "com.apple.Terminal",
+    "expected" : "Send it to the team",
+    "input" : "send it to to the team",
+    "needs_llm" : true,
+    "style" : "ai"
+  },
+  {
+    "bundle_id" : "com.example.Unknown",
+    "expected" : "Hello, world",
+    "input" : "hello , world",
+    "needs_llm" : false,
+    "style" : "default"
+  },
+  {
+    "bundle_id" : "com.microsoft.VSCode",
+    "expected" : "Is it ready?",
+    "input" : "is it ready ?",
+    "needs_llm" : false,
+    "style" : "ai"
+  },
+  {
+    "bundle_id" : "com.hnc.Discord",
+    "expected" : "Wow!",
+    "input" : "wow !",
+    "needs_llm" : false,
+    "style" : "messaging"
+  },
+  {
+    "bundle_id" : "com.apple.Notes",
+    "expected" : "First, second, third.",
+    "input" : "first , second , third .",
+    "needs_llm" : false,
+    "style" : "email"
+  },
+  {
+    "bundle_id" : "com.apple.TextEdit",
+    "expected" : "One two three",
+    "input" : "one  two   three",
+    "needs_llm" : false,
+    "style" : "default"
+  },
+  {
+    "bundle_id" : "com.tinyspeck.slackmacgap",
+    "expected" : "Leading spaces here",
+    "input" : "  leading spaces here",
+    "needs_llm" : false,
+    "style" : "messaging"
+  },
+  {
+    "bundle_id" : "com.apple.mail",
+    "expected" : "Trailing spaces here",
+    "input" : "trailing spaces here   ",
+    "needs_llm" : false,
+    "style" : "email"
+  },
+  {
+    "bundle_id" : "com.apple.Terminal",
+    "expected" : "Starts with comma",
+    "input" : ", starts with comma",
+    "needs_llm" : true,
+    "style" : "ai"
+  },
+  {
+    "bundle_id" : "com.example.Unknown",
+    "expected" : "Starts with dots",
+    "input" : "...starts with dots",
+    "needs_llm" : false,
+    "style" : "default"
+  },
+  {
+    "bundle_id" : "com.microsoft.VSCode",
+    "expected" : "What time is it?",
+    "input" : "what time is it ?",
+    "needs_llm" : false,
+    "style" : "ai"
+  },
+  {
+    "bundle_id" : "com.hnc.Discord",
+    "expected" : "Ok.",
+    "input" : "ok .",
+    "needs_llm" : false,
+    "style" : "messaging"
+  },
+  {
+    "bundle_id" : "com.apple.Notes",
+    "expected" : "Already Capitalized text",
+    "input" : "already Capitalized text",
+    "needs_llm" : false,
+    "style" : "email"
+  },
+  {
+    "bundle_id" : "com.apple.TextEdit",
+    "expected" : "Lowercase start only",
+    "input" : "lowercase start only",
+    "needs_llm" : false,
+    "style" : "default"
+  },
+  {
+    "bundle_id" : "com.tinyspeck.slackmacgap",
+    "expected" : "I think so",
+    "input" : "i think so",
+    "needs_llm" : false,
+    "style" : "messaging"
+  },
+  {
+    "bundle_id" : "com.apple.mail",
+    "expected" : "123 starts with digit",
+    "input" : "123 starts with digit",
+    "needs_llm" : false,
+    "style" : "email"
+  },
+  {
+    "bundle_id" : "com.apple.Terminal",
+    "expected" : "\"quoted start\" here",
+    "input" : "\"quoted start\" here",
+    "needs_llm" : false,
+    "style" : "ai"
+  },
+  {
+    "bundle_id" : "com.example.Unknown",
+    "expected" : "Meet at three no wait four",
+    "input" : "meet at three no wait four",
+    "needs_llm" : true,
+    "style" : "default"
+  },
+  {
+    "bundle_id" : "com.microsoft.VSCode",
+    "expected" : "Send it to John scratch that send it to Mary",
+    "input" : "send it to John scratch that send it to Mary",
+    "needs_llm" : true,
+    "style" : "ai"
+  },
+  {
+    "bundle_id" : "com.hnc.Discord",
+    "expected" : "Turn left I mean right",
+    "input" : "turn left I mean right",
+    "needs_llm" : true,
+    "style" : "messaging"
+  },
+  {
+    "bundle_id" : "com.apple.Notes",
+    "expected" : "The price is ten or rather twelve dollars",
+    "input" : "the price is ten or rather twelve dollars",
+    "needs_llm" : true,
+    "style" : "email"
+  },
+  {
+    "bundle_id" : "com.apple.TextEdit",
+    "expected" : "Call him actually call her",
+    "input" : "call him actually call her",
+    "needs_llm" : true,
+    "style" : "default"
+  },
+  {
+    "bundle_id" : "com.tinyspeck.slackmacgap",
+    "expected" : "I have twenty five apples",
+    "input" : "I have twenty five apples",
+    "needs_llm" : false,
+    "style" : "messaging"
+  },
+  {
+    "bundle_id" : "com.apple.mail",
+    "expected" : "The total is one hundred and fifty dollars",
+    "input" : "the total is one hundred and fifty dollars",
+    "needs_llm" : false,
+    "style" : "email"
+  },
+  {
+    "bundle_id" : "com.apple.Terminal",
+    "expected" : "It costs five dollars comma not six",
+    "input" : "it costs five dollars comma not six",
+    "needs_llm" : true,
+    "style" : "ai"
+  },
+  {
+    "bundle_id" : "com.example.Unknown",
+    "expected" : "Hello comma how are you question mark",
+    "input" : "hello comma how are you question mark",
+    "needs_llm" : true,
+    "style" : "default"
+  },
+  {
+    "bundle_id" : "com.microsoft.VSCode",
+    "expected" : "This is great period",
+    "input" : "this is great period",
+    "needs_llm" : true,
+    "style" : "ai"
+  },
+  {
+    "bundle_id" : "com.hnc.Discord",
+    "expected" : "New line next item",
+    "input" : "new line next item",
+    "needs_llm" : true,
+    "style" : "messaging"
+  },
+  {
+    "bundle_id" : "com.apple.Notes",
+    "expected" : "New paragraph thanks colon",
+    "input" : "new paragraph thanks colon",
+    "needs_llm" : true,
+    "style" : "email"
+  },
+  {
+    "bundle_id" : "com.apple.TextEdit",
+    "expected" : "Bullet milk bullet eggs bullet bread",
+    "input" : "bullet milk bullet eggs bullet bread",
+    "needs_llm" : true,
+    "style" : "default"
+  },
+  {
+    "bundle_id" : "com.tinyspeck.slackmacgap",
+    "expected" : "Number one wake up number two code",
+    "input" : "number one wake up number two code",
+    "needs_llm" : true,
+    "style" : "messaging"
+  },
+  {
+    "bundle_id" : "com.apple.mail",
+    "expected" : "Firstly plan secondly build",
+    "input" : "firstly plan secondly build",
+    "needs_llm" : true,
+    "style" : "email"
+  },
+  {
+    "bundle_id" : "com.apple.Terminal",
+    "expected" : "This sentence needs nothing",
+    "input" : "this sentence needs nothing",
+    "needs_llm" : false,
+    "style" : "ai"
+  },
+  {
+    "bundle_id" : "com.example.Unknown",
+    "expected" : "Please review the attached document.",
+    "input" : "Please review the attached document.",
+    "needs_llm" : false,
+    "style" : "default"
+  },
+  {
+    "bundle_id" : "com.microsoft.VSCode",
+    "expected" : "Thanks for the quick reply!",
+    "input" : "Thanks for the quick reply!",
+    "needs_llm" : false,
+    "style" : "ai"
+  },
+  {
+    "bundle_id" : "com.hnc.Discord",
+    "expected" : "See you at 5:30 tomorrow",
+    "input" : "see you at 5:30 tomorrow",
+    "needs_llm" : false,
+    "style" : "messaging"
+  },
+  {
+    "bundle_id" : "com.apple.Notes",
+    "expected" : "Email me at test@example.com",
+    "input" : "email me at test@example.com",
+    "needs_llm" : false,
+    "style" : "email"
+  },
+  {
+    "bundle_id" : "com.apple.TextEdit",
+    "expected" : "Version 2.0 is out",
+    "input" : "version 2.0 is out",
+    "needs_llm" : false,
+    "style" : "default"
+  }
+]
