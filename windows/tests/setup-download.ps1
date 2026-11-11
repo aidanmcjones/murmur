@@ -40,3 +40,4 @@ With-Server 18732 @('--no-sha') {
     if ($r.Code -eq 0 -or $r.Out -notmatch 'refusing') { throw "missing .sha256 asset must fail:`n$($r.Out)" }
 }
 Write-Host 'setup.ps1 download/hash path OK'
+exit 0
