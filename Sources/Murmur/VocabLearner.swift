@@ -139,18 +139,28 @@ enum VocabDiff {
     }
 
     /// Windows of the buffer's tokens resembling the pasted text, best first (more matched tokens, then later in buffer).
-    static func fuzzyWindows(pasted: String, buffer: String) -> [(text: String, matched: Int)] {
-        let p = tokenize(pasted).map { $0.word.lowercased() }
-        var bt = tokenize(buffer)
-        if p.isEmpty || p.count > 150 { return [] }
-        if bt.count > 12_000 { bt = Array(bt.suffix(12_000)) }
+    static let fuzzyMaxPasted = 60, fuzzyTailTokens = 2_000, fuzzyBudget: TimeInterval = 0.05
+
+    /// Last `fuzzyMaxPasted` tokens of the paste (original text), so very long pastes stay cheap.
+    private static func cappedPaste(_ pasted: String) -> String {
+        let t = tokenize(pasted)
+        return t.count <= fuzzyMaxPasted ? pasted : t.suffix(fuzzyMaxPasted).map { $0.raw }.joined(separator: " ")
+    }
+
+    static func fuzzyWindows(pasted: String, buffer: String, deadline: Date = Date().addingTimeInterval(fuzzyBudget))
+        -> [(text: String, matched: Int)] {
+        let p = tokenize(cappedPaste(pasted)).map { $0.word.lowercased() }
+        var bt = tokenize(String(buffer.suffix(fuzzyTailTokens * 12)))
+        if p.isEmpty { return [] }
+        if bt.count > fuzzyTailTokens { bt = Array(bt.suffix(fuzzyTailTokens)) }
         let b = bt.map { $0.word.lowercased() }
         let need = p.count <= 3 ? max(0, p.count - 2) : Int((0.6 * Double(p.count)).rounded(.up))
         let pset = Set(p)
         var found: [(s: Int, e: Int, m: Int)] = []
         for len in max(1, p.count - 3)...(p.count + 3) {
             guard len <= b.count else { break }
-            for s in 0...(b.count - len) {
+            for s in stride(from: b.count - len, through: 0, by: -1) {  // end of buffer first
+                if s & 15 == 0, Date() > deadline { break }
                 // A matched window needs shared tokens; for tiny pastes (all-edited) accept any start.
                 if need > 0, !b[s..<(s + len)].contains(where: { pset.contains($0) }) { continue }
                 let m = lcsLen(p, b[s..<(s + len)])
@@ -163,17 +173,21 @@ enum VocabDiff {
 
     /// True when the pasted text appears (nearly) intact in the buffer.
     static func fuzzyContains(pasted: String, buffer: String) -> Bool {
-        let n = tokenize(pasted).count
+        let n = tokenize(cappedPaste(pasted)).count
         return fuzzyWindows(pasted: pasted, buffer: buffer).first.map { $0.matched == n } ?? false
     }
 
     static func fuzzyCandidate(pasted: String, buffer: String, dictionary: [DictEntry] = [],
                                rejected: Set<String> = []) -> Candidate? {
+        let deadline = Date().addingTimeInterval(fuzzyBudget)
+        let pasted = cappedPaste(pasted)
         let pn = tokenize(pasted).count
         var tried = 0
         let short = pn <= 3
-        for w in fuzzyWindows(pasted: pasted, buffer: buffer) {
-            if w.matched == pn { continue }  // unchanged copy of the paste
+        let wins = fuzzyWindows(pasted: pasted, buffer: buffer, deadline: deadline)
+        if wins.first.map({ $0.matched == pn }) == true { return nil }  // paste still intact: nothing was edited
+        for w in wins {
+            if Date() > deadline { break }
             if short {  // cheap pre-filter: whole-string similarity of the pasted words vs the window
                 let a = tokenize(pasted).map { $0.word }, b = tokenize(w.text).map { $0.word }
                 if similarity(a, b) < 0.6 { continue }
@@ -282,6 +296,24 @@ enum VocabDiff {
             if !ok { fails += 1 }
             print("\(ok ? "PASS" : "FAIL") fuzzy-apply \"\(i)\" -> \"\(got)\"\(ok ? "" : " (expected \(want))")")
         }
+        // Intact paste + changing spinner + older similar line: no suggestion.
+        let older = "> an older note mentioning a collar here\n✶ Pondering\n│ > collab │\n"
+        let g1 = describe(fuzzyCandidate(pasted: "collab", buffer: older.replacingOccurrences(of: "✶", with: "✻")))
+        if g1 == "none" { print("PASS tui-intact-older-line") } else { fails += 1; print("FAIL tui-intact-older-line: \(g1)") }
+        // Performance: 150-token paste in a 12k-token buffer.
+        let vocab = ["the", "collab", "tree", "open", "window", "and", "then", "list", "my", "tab", "take", "control", "of"]
+        var seed: UInt64 = 42
+        func rnd() -> Int { seed = seed &* 6364136223846793005 &+ 1442695040888963407; return Int(seed >> 33) }
+        let longPaste = (0..<150).map { _ in vocab[rnd() % vocab.count] }.joined(separator: " ")
+        let bigBuf = (0..<12_000).map { _ in vocab[rnd() % vocab.count] }.joined(separator: " ") + " " + longPaste.replacingOccurrences(of: "tree", with: "Kolabtree")
+        _ = NSSpellChecker.shared.checkSpelling(of: "warmup", startingAt: 0)
+        let t0 = Date()
+        _ = fuzzyCandidate(pasted: longPaste, buffer: bigBuf)
+        let ms = Date().timeIntervalSince(t0) * 1000
+        if ms < 100 { print("PASS fuzzy-perf \(Int(ms)) ms") } else { fails += 1; print("FAIL fuzzy-perf \(Int(ms)) ms") }
+        // Hand-written single-word replacement must not match fuzzily.
+        let hand = Post.applyDictionary("say Colab tree", [DictEntry(phrase: "collab tree", replacement: "Kolabtree")])
+        if hand == "say Colab tree" { print("PASS fuzzy-hand-written-exact-only") } else { fails += 1; print("FAIL fuzzy-hand-written: \(hand)") }
         print(fails == 0 ? "ALL PASS" : "\(fails) FAILED")
         return fails == 0 ? 0 : 1
     }
@@ -406,7 +438,7 @@ final class VocabLearner {
     /// Ends the current watch (new dictation, focus moved, timeout). Evaluates once if there are pending edits.
     func stop(evaluate: Bool = false) {
         generation += 1
-        if evaluate, element != nil { _ = evaluateNow() }
+        if evaluate, element != nil { evaluateNow() }
         timer?.invalidate(); timer = nil
         if let o = observer {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(o), .defaultMode)
@@ -435,27 +467,40 @@ final class VocabLearner {
         if v != lastValue { lastValue = v; dirtyAt = Date() }
         if let d = dirtyAt, Date().timeIntervalSince(d) >= Self.debounce {
             dirtyAt = nil
-            if evaluateNow() { stop() }
+            evaluateNow()
         }
     }
 
-    /// Returns true when a suggestion was shown.
-    private func evaluateNow() -> Bool {
-        guard let el = element, let v = value(el), (v as NSString).length <= Self.maxChars else { return false }
+    private var evaluating = false
+
+    /// Reads the field on main, runs the heavy diff off-main, then shows the pop-up on main if the watch is still current.
+    private func evaluateNow() {
+        guard !evaluating, let el = element, let v = value(el), (v as NSString).length <= Self.maxChars else { return }
+        evaluating = true
+        let gen = generation
         let dict = UserDictionary.load(), rej = Settings.rejectedPairs
-        var found: VocabDiff.Candidate?
-        if region.0 >= 0,
-           let (o, n) = VocabDiff.editedRegion(old: snapshot, new: v, regionStart: region.0, regionEnd: region.1),
-           (n as NSString).length <= (o as NSString).length * 3 + 200 {
-            found = VocabDiff.candidate(pasted: o, edited: n, dictionary: dict, rejected: rej)
+        let (snap, text, reg) = (snapshot, pasted, region)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            var found: VocabDiff.Candidate?
+            var fuzzy = false
+            if reg.0 >= 0,
+               let (o, n) = VocabDiff.editedRegion(old: snap, new: v, regionStart: reg.0, regionEnd: reg.1),
+               (n as NSString).length <= (o as NSString).length * 3 + 200 {
+                found = VocabDiff.candidate(pasted: o, edited: n, dictionary: dict, rejected: rej)
+            }
+            if found == nil, v != snap {
+                found = VocabDiff.fuzzyCandidate(pasted: text, buffer: v, dictionary: dict, rejected: rej)
+                fuzzy = found != nil
+            }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.evaluating = false
+                guard gen == self.generation, let c = found else { return }
+                if fuzzy { DebugLog.log("learn: fuzzy anchor") }
+                self.suggest(c)
+                self.stop()
+            }
         }
-        if found == nil, v != snapshot {
-            found = VocabDiff.fuzzyCandidate(pasted: pasted, buffer: v, dictionary: dict, rejected: rej)
-            if found != nil { DebugLog.log("learn: fuzzy anchor") }
-        }
-        guard let c = found else { return false }
-        suggest(c)
-        return true
     }
 
     private func suggest(_ c: VocabDiff.Candidate) {

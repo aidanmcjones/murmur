@@ -30,7 +30,7 @@ enum Fuzzy {
 
     static func eligible(_ e: DictEntry) -> Bool {
         guard let r = e.replacement, !r.isEmpty else { return false }
-        return e.learned == true || !r.contains(where: { $0.isWhitespace })
+        return e.learned == true
     }
 
     private static let wordRe = try! NSRegularExpression(pattern: "[\\p{L}\\p{N}]+")
