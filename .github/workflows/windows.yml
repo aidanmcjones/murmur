@@ -50,8 +50,9 @@ jobs:
         shell: pwsh
         run: |
           $o = Start-Process -FilePath target\release\murmur.exe -ArgumentList '--version' -Wait -PassThru -NoNewWindow -RedirectStandardOutput v.txt
-          Get-Content v.txt
-          if ($o.ExitCode -ne 0) { throw "murmur --version failed" }
+          $v = (Get-Content -Raw v.txt)
+          Write-Host "version output: '$v'"
+          if ($o.ExitCode -ne 0 -or $v -notmatch 'murmur 0\.1\.0') { throw "murmur --version failed" }
       - name: package zip
         shell: pwsh
         env:
