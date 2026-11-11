@@ -1,0 +1,14 @@
+/Users/aidanjones/Tools/murmur-win/windows/target/debug/deps/serde-0f7eebe35d90af5e.d: /Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /Users/aidanjones/Tools/murmur-win/windows/target/debug/build/serde-eaa3de96a870a152/out/private.rs
+
+/Users/aidanjones/Tools/murmur-win/windows/target/debug/deps/libserde-0f7eebe35d90af5e.rlib: /Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /Users/aidanjones/Tools/murmur-win/windows/target/debug/build/serde-eaa3de96a870a152/out/private.rs
+
+/Users/aidanjones/Tools/murmur-win/windows/target/debug/deps/libserde-0f7eebe35d90af5e.rmeta: /Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs /Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs /Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs /Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs /Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs /Users/aidanjones/Tools/murmur-win/windows/target/debug/build/serde-eaa3de96a870a152/out/private.rs
+
+/Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/lib.rs:
+/Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/integer128.rs:
+/Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/mod.rs:
+/Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/de.rs:
+/Users/aidanjones/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.229/src/private/ser.rs:
+/Users/aidanjones/Tools/murmur-win/windows/target/debug/build/serde-eaa3de96a870a152/out/private.rs:
+
+# env-dep:OUT_DIR=/Users/aidanjones/Tools/murmur-win/windows/target/debug/build/serde-eaa3de96a870a152/out
