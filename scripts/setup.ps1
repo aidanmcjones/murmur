@@ -17,7 +17,14 @@
 .PARAMETER NoLaunch     Install only, do not start Murmur.
 .PARAMETER InstallDir   Default: %LOCALAPPDATA%\Murmur
 .PARAMETER Repo         Default: aidanmcjones/murmur
-.PARAMETER Tag          Install a specific release tag (default: newest win-v* release).
+.PARAMETER Tag          Install a specific release tag (default: the pinned release below).
+.PARAMETER ExpectedSha256 SHA-256 the release zip must have; needed for any -Tag other than the pinned one.
+.PARAMETER ApiBase      GitHub API base URL (default https://api.github.com; CI points it at a local mock).
+
+  Release pinning: $PinnedTag/$PinnedSha256 below name the one release this script installs, and the zip must match
+  that hash (and the release's .sha256 asset, which must exist). After a `win-v*` tag is published, the windows
+  workflow's release job prints the two new lines in its step summary; commit them here. Until the first release
+  is pinned, use -Tag with -ExpectedSha256, or -ZipPath.
 .PARAMETER ZipPath      Use a local murmur-win-x64.zip instead of downloading a release (used by CI).
 .PARAMETER SkipLlmModel Skip the 2.5 GB cleanup model (Murmur then uses deterministic cleanup only).
 #>
@@ -29,12 +36,18 @@ param(
     [string]$Repo = 'aidanmcjones/murmur',
     [string]$Tag = '',
     [string]$ZipPath = '',
+    [string]$ExpectedSha256 = '',
+    [string]$ApiBase = 'https://api.github.com',
     [switch]$SkipLlmModel
 )
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+# Pinned Windows release (update after each win-v* release, see the header).
+$PinnedTag = ''
+$PinnedSha256 = ''
 
 $ParakeetUrl = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2'
 $ParakeetSize = 482440461
@@ -104,18 +117,28 @@ $relTag = 'local'
 if (-not $zip) {
     $headers = @{ 'User-Agent' = 'murmur-setup'; 'Accept' = 'application/vnd.github+json' }
     if ($env:GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $env:GITHUB_TOKEN" }
-    $rels = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases?per_page=50" -Headers $headers
-    $rel = $rels | Where-Object { -not $_.draft -and $_.tag_name -like 'win-v*' -and ($Tag -eq '' -or $_.tag_name -eq $Tag) } | Select-Object -First 1
-    if (-not $rel) { Fail "No Windows release (tag win-v*) found in $Repo yet." }
+    $wantTag = if ($Tag) { $Tag } else { $PinnedTag }
+    if (-not $wantTag) { Fail 'No release is pinned in setup.ps1 yet. Pass -Tag with -ExpectedSha256, or -ZipPath.' }
+    $expected = $ExpectedSha256
+    if (-not $expected -and $wantTag -eq $PinnedTag) { $expected = $PinnedSha256 }
+    if (-not $expected) { Fail "No expected SHA-256 for $wantTag. Pin it in setup.ps1 or pass -ExpectedSha256." }
+    $expected = $expected.Trim().ToLower()
+    if ($expected -notmatch '^[0-9a-f]{64}$') { Fail "Malformed expected SHA-256: $expected" }
+    $rels = Invoke-RestMethod -Uri "$ApiBase/repos/$Repo/releases?per_page=50" -Headers $headers
+    $rel = $rels | Where-Object { -not $_.draft -and $_.tag_name -like 'win-v*' -and $_.tag_name -eq $wantTag } | Select-Object -First 1
+    if (-not $rel) { Fail "Release $wantTag not found in $Repo." }
     $asset = $rel.assets | Where-Object { $_.name -eq 'murmur-win-x64.zip' } | Select-Object -First 1
     if (-not $asset) { Fail "Release $($rel.tag_name) has no murmur-win-x64.zip asset." }
     $relTag = $rel.tag_name
     $zip = Join-Path $env:TEMP "murmur-win-x64-$relTag.zip"
     $shaAsset = $rel.assets | Where-Object { $_.name -eq 'murmur-win-x64.zip.sha256' } | Select-Object -First 1
-    $expected = ''
-    if ($shaAsset) {
-        $expected = ((Invoke-RestMethod -Uri $shaAsset.browser_download_url -Headers $headers) -as [string]).Trim().Split(' ')[0]
-    }
+    if (-not $shaAsset) { Fail "Release $relTag has no murmur-win-x64.zip.sha256 asset; refusing to install an unverifiable zip." }
+    # The asset is served as application/octet-stream, so the body may arrive as bytes: decode explicitly.
+    $shaResp = Invoke-WebRequest -Uri $shaAsset.browser_download_url -Headers $headers -UseBasicParsing
+    $shaText = if ($shaResp.Content -is [byte[]]) { [Text.Encoding]::UTF8.GetString($shaResp.Content) } else { [string]$shaResp.Content }
+    $assetSha = ($shaText.Trim() -split '\s+')[0].ToLower()
+    if ($assetSha -ne $expected) { Fail "Release .sha256 asset ($assetSha) does not match the expected SHA-256 ($expected)." }
+    $expected = $assetSha
     Get-Verified $asset.browser_download_url $zip $asset.size $expected
 }
 if (-not (Test-Path -LiteralPath $zip)) { Fail "Zip not found: $zip" }

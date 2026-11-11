@@ -2,16 +2,24 @@
 
 use crate::util::{app_dir, gguf_path, llama_server_path, log};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-pub const PORT: u16 = 8179;
+/// Port of the llama-server we spawned (0 = none). Chosen per launch by asking the OS for a free port, so a
+/// foreign process on a well-known port is never trusted.
+static PORT: AtomicU16 = AtomicU16::new(0);
+
+fn free_port() -> Option<u16> {
+    let l = std::net::TcpListener::bind(("127.0.0.1", 0)).ok()?;
+    Some(l.local_addr().ok()?.port())
+}
 
 static CHILD: Mutex<Option<Child>> = Mutex::new(None);
 static STARTING: Mutex<bool> = Mutex::new(false);
 
 fn base() -> String {
-    format!("http://127.0.0.1:{PORT}")
+    format!("http://127.0.0.1:{}", PORT.load(Ordering::SeqCst))
 }
 
 pub fn available() -> bool {
@@ -22,8 +30,27 @@ fn agent(timeout: Duration) -> ureq::Agent {
     ureq::AgentBuilder::new().timeout(timeout).build()
 }
 
-/// llama-server answers /health with 200 only once the model is loaded.
+pub fn port() -> u16 {
+    PORT.load(Ordering::SeqCst)
+}
+
+/// PID of our llama-server child while it is alive.
+pub fn child_pid() -> Option<u32> {
+    let mut g = CHILD.lock().unwrap();
+    let c = g.as_mut()?;
+    if matches!(c.try_wait(), Ok(None)) {
+        Some(c.id())
+    } else {
+        None
+    }
+}
+
+/// llama-server answers /health with 200 only once the model is loaded. Only our own live child on the port we
+/// picked for it counts; if it died, whatever else listens on that port is not trusted.
 pub fn is_ready() -> bool {
+    if PORT.load(Ordering::SeqCst) == 0 || child_pid().is_none() {
+        return false;
+    }
     agent(Duration::from_millis(400)).get(&format!("{}/health", base())).call().map(|r| r.status() == 200).unwrap_or(false)
 }
 
@@ -60,9 +87,14 @@ fn spawn() -> bool {
         log("llm: llama-server.exe or the cleanup model is missing; deterministic cleanup only");
         return false;
     }
+    let Some(port) = free_port() else {
+        log("llm: no free local port for llama-server");
+        return false;
+    };
+    PORT.store(port, Ordering::SeqCst);
     let logf = std::fs::OpenOptions::new().create(true).append(true).open(app_dir().join("llama-server.log")).ok();
     let mut cmd = Command::new(llama_server_path());
-    cmd.args(["-m", &gguf_path().to_string_lossy(), "--host", "127.0.0.1", "--port", &PORT.to_string(), "-c", "4096", "--jinja", "-np", "1"]);
+    cmd.args(["-m", &gguf_path().to_string_lossy(), "--host", "127.0.0.1", "--port", &port.to_string(), "-c", "4096", "--jinja", "-np", "1"]);
     cmd.stdin(Stdio::null());
     match logf {
         Some(f) => {
@@ -145,6 +177,7 @@ pub fn shutdown() {
     if let Some(mut c) = CHILD.lock().unwrap().take() {
         let _ = c.kill();
     }
+    PORT.store(0, Ordering::SeqCst);
 }
 
 /// One chat completion; None on any error or when `timeout` passes.

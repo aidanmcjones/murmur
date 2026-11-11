@@ -98,6 +98,9 @@ jobs:
           if (-not (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run').Murmur) { throw 'startup entry missing' }
           Get-ChildItem "$env:LOCALAPPDATA\Murmur" | Format-Table Name, Length
           if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Murmur.lnk")) { throw 'shortcut missing' }
+      - name: setup.ps1 real download + hash path (local mock release server)
+        shell: pwsh
+        run: ./windows/tests/setup-download.ps1 -Zip "$PWD\dist\murmur-win-x64.zip" -InstallDir "$env:LOCALAPPDATA\Murmur"
       - name: synthesize speech (System.Speech)
         shell: pwsh
         run: ./windows/tests/make-wav.ps1 -Out "$env:RUNNER_TEMP\speech.wav"
@@ -141,6 +144,15 @@ jobs:
         with:
           name: murmur-win-x64
           path: dist
+      - name: pin lines for scripts/setup.ps1
+        run: |
+          {
+            echo '### Pin this release in scripts/setup.ps1'
+            echo '```'
+            echo "\$PinnedTag = '${{ github.ref_name }}'"
+            echo "\$PinnedSha256 = '$(cut -d' ' -f1 dist/murmur-win-x64.zip.sha256)'"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: create release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -157,6 +169,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: murmur-win-x64
+          path: dist
       - uses: actions/cache/restore@v4
         with:
           path: ~\AppData\Local\Murmur\models
@@ -166,6 +182,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          ./scripts/setup.ps1 -NoLaunch -Tag "${{ github.ref_name }}"
+          $sha = ((Get-Content -Raw dist/murmur-win-x64.zip.sha256).Trim() -split '\s+')[0]
+          ./scripts/setup.ps1 -NoLaunch -Tag "${{ github.ref_name }}" -ExpectedSha256 $sha
           & "$env:LOCALAPPDATA\Murmur\murmur.exe" --version
           if (-not (Test-Path "$env:LOCALAPPDATA\Murmur\llama-server.exe")) { throw 'llama-server.exe missing' }

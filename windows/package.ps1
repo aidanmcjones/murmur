@@ -14,20 +14,19 @@ New-Item -ItemType Directory -Force -Path $stage | Out-Null
 Copy-Item (Join-Path $Target 'murmur.exe') $stage
 Get-ChildItem $Target -Filter *.dll -File | Where-Object { $_.Name -match 'sherpa|onnxruntime|cargs' } | ForEach-Object { Copy-Item $_.FullName $stage }
 
-# llama.cpp: official Windows CPU build from the latest release.
-$headers = @{ 'User-Agent' = 'murmur-ci' }
-if ($env:GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $env:GITHUB_TOKEN" }
-$rels = Invoke-RestMethod -Uri 'https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=10' -Headers $headers
-$rel = $null; $asset = $null
-foreach ($r in $rels) {
-    $a = $r.assets | Where-Object { $_.name -match 'bin-win-cpu-x64\.zip$' } | Select-Object -First 1
-    if (-not $a) { $a = $r.assets | Where-Object { $_.name -match 'bin-win-avx2-x64\.zip$' } | Select-Object -First 1 }
-    if ($a) { $rel = $r; $asset = $a; break }
-}
-if (-not $asset) { throw 'No Windows CPU x64 asset in the recent llama.cpp releases' }
+# llama.cpp: official Windows CPU build, pinned (same tag as scripts/setup.sh) and verified by SHA-256.
+# To bump: pick a release at https://github.com/ggml-org/llama.cpp/releases, update both values from the
+# `llama-<tag>-bin-win-cpu-x64.zip` asset (GitHub shows its sha256 digest), and keep setup.sh's LLAMA_TAG in step.
+$LlamaTag = 'b11429'
+$LlamaZipName = "llama-$LlamaTag-bin-win-cpu-x64.zip"
+$LlamaSha256 = '1283323272b04cd07905816a597a0da810918102de958f4ff6f7bbaa70ed2efe'
+$rel = [pscustomobject]@{ tag_name = $LlamaTag }
+$asset = [pscustomobject]@{ name = $LlamaZipName; browser_download_url = "https://github.com/ggml-org/llama.cpp/releases/download/$LlamaTag/$LlamaZipName" }
 Write-Host "llama.cpp $($rel.tag_name): $($asset.name)"
 $lz = Join-Path $Out 'llama.zip'
 Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $lz -UseBasicParsing
+$got = (Get-FileHash -LiteralPath $lz -Algorithm SHA256).Hash.ToLower()
+if ($got -ne $LlamaSha256) { throw "llama.cpp archive SHA-256 mismatch: expected $LlamaSha256, got $got" }
 $lx = Join-Path $Out 'llama'
 Expand-Archive -LiteralPath $lz -DestinationPath $lx -Force
 $srv = Get-ChildItem $lx -Recurse -Filter llama-server.exe | Select-Object -First 1

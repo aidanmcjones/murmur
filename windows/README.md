@@ -9,8 +9,9 @@ you are typing. Everything runs locally (no cloud).
 powershell -ExecutionPolicy Bypass -File scripts\setup.ps1          # add -Startup to start at login, -NoLaunch to not start it
 ```
 
-`scripts/setup.ps1` is non-interactive and idempotent. It downloads the newest `win-v*` release zip to
-`%LOCALAPPDATA%\Murmur`, then the speech model (NVIDIA Parakeet TDT 0.6B v2, int8 ONNX) and the cleanup model
+`scripts/setup.ps1` is non-interactive and idempotent. It downloads the pinned `win-v*` release zip (tag and SHA-256 embedded in the script, plus the release's required
+`.sha256` asset; after publishing a release, copy the two pin lines from the release job's step summary into
+`scripts/setup.ps1`) to `%LOCALAPPDATA%\Murmur`, then the speech model (NVIDIA Parakeet TDT 0.6B v2, int8 ONNX) and the cleanup model
 (Qwen3-4B-Instruct-2507 Q4_K_M GGUF) into `%LOCALAPPDATA%\Murmur\models` with resume and size/SHA-256 checks, and
 creates a Start-menu shortcut. Things only a human can do: allow desktop apps to use the microphone (Settings >
 Privacy & security > Microphone) and, if SmartScreen appears, click "More info" > "Run anyway".

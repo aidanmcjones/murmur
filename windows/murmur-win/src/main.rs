@@ -99,6 +99,14 @@ fn llm_selftest() -> i32 {
         return 1;
     }
     eprintln!("server ready after {} ms", t0.elapsed().as_millis());
+    // The server we reached must be our own freshly launched child (random port, child alive), not a stranger.
+    match llm::child_pid() {
+        Some(pid) => eprintln!("llama-server is our child, pid {pid}, port {}", llm::port()),
+        None => {
+            eprintln!("murmur: ready server is not our own child process");
+            return 1;
+        }
+    }
     let raw = "um so can you uh send me the file by friday";
     let sys = cleanup::system_prompt("notepad.exe", "Notepad", &[]);
     let msgs = cleanup::messages(&sys, &cleanup::wrap(raw));
