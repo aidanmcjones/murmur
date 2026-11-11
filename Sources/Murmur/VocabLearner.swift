@@ -514,7 +514,13 @@ final class VocabLearner {
         }
     }
 
+    /// Last pair offered and when; repeat debounces of the same edit must not pop the same suggestion twice.
+    private var lastSuggested: (pair: String, at: Date)?
+
     private func suggest(_ c: VocabDiff.Candidate) {
+        let key = c.heard.lowercased() + "→" + c.wanted
+        if let l = lastSuggested, l.pair == key, Date().timeIntervalSince(l.at) < 60 { return }
+        lastSuggested = (key, Date())
         let app = bundleId
         DebugLog.log("learn: suggest \(c.heard) -> \(c.wanted)")
         logHistory("vocab-suggest", c, app)
