@@ -24,6 +24,11 @@ final class Hotkey {
     private let doubleTapWindow: TimeInterval = 0.5
 
     func start() -> Bool {
+        // Test guard: headless runs must never create an event tap.
+        if ProcessInfo.processInfo.environment["MURMUR_ASSERT_NO_TAP"] != nil {
+            FileHandle.standardError.write(Data("murmur: MURMUR_ASSERT_NO_TAP set but an event tap was requested\n".utf8))
+            exit(3)
+        }
         let mask: CGEventMask = (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
             | (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.rightMouseDown.rawValue)
         let cb: CGEventTapCallBack = { _, type, event, refcon in
