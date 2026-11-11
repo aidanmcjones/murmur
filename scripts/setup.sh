@@ -119,7 +119,7 @@ if [ "$ACCURATE" = 1 ]; then
 fi
 
 # 5. Build and install.
-if [ "$FORCE" != 1 ] && pgrep -f "$PREFIX/Murmur.app/Contents/MacOS/Murmur" >/dev/null 2>&1; then
+if [ "$FORCE" != 1 ] && ps -axo command= | awk -v p="$PREFIX/Murmur.app/Contents/MacOS/Murmur" 'index($0, p) == 1 { f = 1 } END { exit !f }'; then  # literal match (pgrep -f is a regex)
   say "Murmur is running from $PREFIX/Murmur.app. Downloads are done; the installed app was not replaced."
   echo "Quit Murmur and re-run, or pass --force." >&2
   exit 0
