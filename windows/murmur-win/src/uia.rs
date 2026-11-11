@@ -15,7 +15,8 @@ use windows::core::Interface;
 use windows::Win32::System::Com::*;
 use windows::Win32::UI::Accessibility::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
-use windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+use windows::Win32::UI::WindowsAndMessaging::*;
 
 pub const MAX_CHARS: usize = 50_000;
 const WATCH_SECS: u64 = 45;
@@ -79,6 +80,60 @@ pub struct Field {
     pub password: bool,
 }
 
+/// A focused text element: a UI Automation element, or a classic Win32 Edit/RichEdit control (read with
+/// WM_GETTEXT) for apps whose controls expose no UIA text pattern.
+#[derive(Clone)]
+pub enum Elem {
+    Ui(IUIAutomationElement),
+    Win(isize),
+}
+
+const EM_GETSEL: u32 = 0xB0;
+const ES_PASSWORD: u32 = 0x20;
+
+unsafe fn send_timeout(h: HWND, msg: u32, wp: usize, lp: isize) -> Option<usize> {
+    let mut res = 0usize;
+    let r = SendMessageTimeoutW(h, msg, WPARAM(wp), LPARAM(lp), SMTO_ABORTIFHUNG, 250, Some(&mut res));
+    if r.0 == 0 { None } else { Some(res) }
+}
+
+fn native_focus_hwnd() -> Option<HWND> {
+    unsafe {
+        let (fg, _) = win32::foreground();
+        let tid = GetWindowThreadProcessId(fg, None);
+        let mut gi = GUITHREADINFO { cbSize: std::mem::size_of::<GUITHREADINFO>() as u32, ..Default::default() };
+        GetGUIThreadInfo(tid, &mut gi).ok()?;
+        if gi.hwndFocus.0.is_null() { None } else { Some(gi.hwndFocus) }
+    }
+}
+
+fn read_native(h: HWND) -> Option<Field> {
+    unsafe {
+        let mut cls = [0u16; 64];
+        let n = GetClassNameW(h, &mut cls);
+        let class = String::from_utf16_lossy(&cls[..n.max(0) as usize]).to_lowercase();
+        if !(class == "edit" || class.starts_with("richedit")) {
+            return None;
+        }
+        if class == "edit" && (GetWindowLongW(h, GWL_STYLE) as u32) & ES_PASSWORD != 0 {
+            return Some(Field { text: String::new(), caret: None, password: true });
+        }
+        let len = send_timeout(h, WM_GETTEXTLENGTH, 0, 0)?;
+        if len > MAX_CHARS {
+            return None;
+        }
+        let mut buf = vec![0u16; len + 2];
+        let got = send_timeout(h, WM_GETTEXT, len + 1, buf.as_mut_ptr() as isize)?;
+        let raw = &buf[..got.min(len + 1)];
+        let (mut start, mut end) = (0u32, 0u32);
+        let caret = send_timeout(h, EM_GETSEL, &mut start as *mut u32 as usize, &mut end as *mut u32 as isize).map(|_| {
+            let s = (start as usize).min(raw.len());
+            utf16_len(&String::from_utf16_lossy(&raw[..s]).replace("\r\n", "\n"))
+        });
+        Some(Field { text: String::from_utf16_lossy(raw).replace("\r\n", "\n"), caret, password: false })
+    }
+}
+
 pub struct Uia {
     auto: IUIAutomation,
 }
@@ -96,15 +151,41 @@ impl Uia {
         }
     }
 
-    pub fn focused(&self) -> Option<IUIAutomationElement> {
+    fn focused_ui(&self) -> Option<IUIAutomationElement> {
         unsafe { self.auto.GetFocusedElement().ok() }
+    }
+
+    /// The focused element together with its readable contents (UI Automation first, then classic controls).
+    pub fn focus(&self) -> Option<(Elem, Field)> {
+        if let Some(el) = self.focused_ui() {
+            if let Some(f) = self.read_ui(&el) {
+                return Some((Elem::Ui(el), f));
+            }
+        }
+        let h = native_focus_hwnd()?;
+        read_native(h).map(|f| (Elem::Win(h.0 as isize), f))
+    }
+
+    pub fn read_elem(&self, e: &Elem) -> Option<Field> {
+        match e {
+            Elem::Ui(el) => self.read_ui(el),
+            Elem::Win(h) => read_native(HWND(*h as *mut _)),
+        }
+    }
+
+    /// Is `e` still the focused element?
+    pub fn is_focused(&self, e: &Elem) -> bool {
+        match e {
+            Elem::Ui(el) => self.focused_ui().map(|cur| self.same(&cur, el)).unwrap_or(false),
+            Elem::Win(h) => native_focus_hwnd().map(|x| x.0 as isize == *h).unwrap_or(false),
+        }
     }
 
     pub fn same(&self, a: &IUIAutomationElement, b: &IUIAutomationElement) -> bool {
         unsafe { self.auto.CompareElements(a, b).map(|v| v.as_bool()).unwrap_or(false) }
     }
 
-    pub fn read(&self, el: &IUIAutomationElement) -> Option<Field> {
+    fn read_ui(&self, el: &IUIAutomationElement) -> Option<Field> {
         unsafe {
             if el.CurrentIsPassword().map(|b| b.as_bool()).unwrap_or(false) {
                 return Some(Field { text: String::new(), caret: None, password: true });
@@ -152,9 +233,6 @@ impl Uia {
         }
     }
 
-    pub fn pid(&self, el: &IUIAutomationElement) -> u32 {
-        unsafe { el.CurrentProcessId().unwrap_or(0) as u32 }
-    }
 }
 
 /// Text before the caret (empty when unknown).
@@ -169,8 +247,7 @@ fn before_caret(f: &Field) -> String {
 /// Debug/CI helper: prints the focused element's text via UI Automation.
 pub fn read_focused_text() -> Option<String> {
     let u = Uia::new()?;
-    let el = u.focused()?;
-    u.read(&el).map(|f| f.text)
+    u.focus().map(|(_, f)| f.text)
 }
 
 // ---- learner -----------------------------------------------------------------------------------
@@ -179,7 +256,7 @@ struct Watch {
     pasted: String,
     exe: String,
     pid: u32,
-    element: Option<IUIAutomationElement>,
+    element: Option<Elem>,
     snapshot: String,
     last_value: String,
     /// Pasted region in UTF-16 offsets of `snapshot`.
@@ -240,9 +317,8 @@ fn begin(uia: &Uia, w: &mut Watch, last: bool) -> bool {
     if fpid != w.pid {
         return true;
     }
-    let focused = uia.focused();
-    if let Some(el) = focused {
-        if let Some(f) = uia.read(&el) {
+    {
+        if let Some((el, f)) = uia.focus() {
             if f.password {
                 w.replay = ReplayModel::new("");
                 w.resolved = true;
@@ -275,7 +351,7 @@ fn evaluate(uia: &Uia, w: &Watch, final_: bool) -> Option<(Candidate, &'static s
     let rej: HashSet<String> = crate::app::config().rejected_pairs.into_iter().collect();
     let mut ax_now = None;
     if let Some(el) = &w.element {
-        if let Some(f) = uia.read(el) {
+        if let Some(f) = uia.read_elem(el) {
             ax_now = Some(f.text);
         }
     }
@@ -348,7 +424,7 @@ impl Learner {
             if now >= at {
                 w.pending_mouse = None;
                 let loc = match (&w.element, w.region) {
-                    (Some(el), Some((rs, _))) => uia.read(el).and_then(|f| f.caret).and_then(|c| c.checked_sub(rs)),
+                    (Some(el), Some((rs, _))) => uia.read_elem(el).and_then(|f| f.caret).and_then(|c| c.checked_sub(rs)),
                     _ => None,
                 };
                 w.replay.resolve_caret(loc, 0);
@@ -359,33 +435,28 @@ impl Learner {
             self.finish();
             return;
         }
-        if let Some(el) = &w.element {
-            match uia.focused() {
-                Some(cur) if uia.same(&cur, el) => {
-                    w.focus_lost_since = None;
-                    if let Some(f) = uia.read(el) {
-                        if f.password {
-                            stop(&mut self.watch);
-                            return;
-                        }
-                        if f.text != w.last_value {
-                            w.last_value = f.text;
-                            w.dirty_at = Some(now);
-                        }
-                    }
-                }
-                other => {
-                    if let Some(c) = other {
-                        if uia.read(&c).map(|f| f.password).unwrap_or(false) {
-                            stop(&mut self.watch);
-                            return;
-                        }
-                    }
-                    let since = *w.focus_lost_since.get_or_insert(now);
-                    if now - since > FOCUS_GRACE {
-                        self.finish();
+        if let Some(el) = w.element.clone() {
+            if uia.is_focused(&el) {
+                w.focus_lost_since = None;
+                if let Some(f) = uia.read_elem(&el) {
+                    if f.password {
+                        stop(&mut self.watch);
                         return;
                     }
+                    if f.text != w.last_value {
+                        w.last_value = f.text;
+                        w.dirty_at = Some(now);
+                    }
+                }
+            } else {
+                if uia.focus().map(|(_, f)| f.password).unwrap_or(false) {
+                    stop(&mut self.watch);
+                    return;
+                }
+                let since = *w.focus_lost_since.get_or_insert(now);
+                if now - since > FOCUS_GRACE {
+                    self.finish();
+                    return;
                 }
             }
         }
@@ -456,8 +527,8 @@ impl Learner {
             LCmd::Probe(reply) => {
                 let before = match &self.uia {
                     Some(u) => u
-                        .focused()
-                        .and_then(|el| u.read(&el))
+                        .focus()
+                        .map(|(_, f)| f)
                         .filter(|f| !f.password)
                         .map(|f| before_caret(&f))
                         .unwrap_or_default(),

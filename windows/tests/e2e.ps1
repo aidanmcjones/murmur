@@ -21,6 +21,19 @@ public static class Win {
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int cmd);
     [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr h);
     [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowEx(IntPtr p, IntPtr a, string cls, string title);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, System.Text.StringBuilder l);
+    [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, int msg, IntPtr w, IntPtr l);
+    // Classic Edit / RichEdit controls (Notepad) are read with WM_GETTEXT.
+    public static string EditText(IntPtr top) {
+        IntPtr e = FindWindowEx(top, IntPtr.Zero, "Edit", null);
+        if (e == IntPtr.Zero) e = FindWindowEx(top, IntPtr.Zero, "RichEditD2DPT", null);
+        if (e == IntPtr.Zero) return null;
+        int len = (int)SendMessage(e, 0x000E, IntPtr.Zero, IntPtr.Zero);
+        System.Text.StringBuilder sb = new System.Text.StringBuilder(len + 2);
+        SendMessage(e, 0x000D, (IntPtr)(len + 1), sb);
+        return sb.ToString();
+    }
     public static void Key(ushort vk, bool up, bool ext) {
         INPUT[] i = new INPUT[1];
         i[0].type = 1; i[0].ki.wVk = vk; i[0].ki.dwFlags = (uint)((up ? 2 : 0) | (ext ? 1 : 0));
@@ -81,6 +94,8 @@ function Find-Editor {
     return $best
 }
 function Get-NotepadText {
+    $native = [Win]::EditText($hwnd)
+    if ($null -ne $native) { return $native }
     if (-not $script:editEl) { $script:editEl = Find-Editor }
     if (-not $script:editEl) { return $null }
     $o = $null
