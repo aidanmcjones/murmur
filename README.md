@@ -2,28 +2,41 @@
 
 Hold a key, talk, let go: clean, punctuated text appears wherever your cursor is. Murmur is a free, open-source push-to-talk dictation app for macOS that runs **entirely on your Mac**. No account, no subscription, and your voice never leaves the computer.
 
-- **Fast:** text is usually pasted 150–350 ms after you release the key. Speech recognition runs on the Apple Neural Engine.
-- **Clean:** it removes filler words, applies self-corrections ("at three, no wait, four" → "at 4"), writes numbers as digits, fixes punctuation, formats lists, and adjusts to the app you're typing in.
-- **Private:** speech recognition and cleanup both run locally with open models.
-- Inspired by Wispr Flow's experience and tuned against it black-box (see below). Not affiliated with Wispr.
+> **Status: early.** Murmur is installed by building from source with one script (below). A prebuilt download is in progress; Windows is in beta.
 
-> **Status: early.** You currently build Murmur from source (below). A prebuilt download and a Windows version are in progress.
+## Install with your AI agent
+Paste this into Claude Code, Codex or any coding agent, from an empty folder:
 
-## Requirements
-- A Mac with Apple Silicon running macOS 14 or later.
-- Xcode Command Line Tools (`xcode-select --install`).
-- [Homebrew](https://brew.sh) `llama.cpp` for the cleanup model: `brew install llama.cpp`. Accurate mode also needs `brew install whisper-cpp`.
-- About 4 GB of disk for models.
+> Clone https://github.com/aidanmcjones/murmur, read AGENTS.md, and install Murmur on this computer; tell me only what I have to click myself.
 
-## Install from source
+The agent runs the installer, verifies it, and lists the few steps only you can do (permissions).
+
+## Install by hand
+
+### Mac (Apple Silicon, macOS 14+)
 ```
 git clone https://github.com/aidanmcjones/murmur && cd murmur
-mkdir -p ~/Library/Application\ Support/Murmur/models
-curl -L -o ~/Library/Application\ Support/Murmur/models/qwen3-4b-instruct-2507-q4_K_M.gguf \
-  https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
-scripts/build.sh && scripts/install.sh && open ~/Applications/Murmur.app
+scripts/setup.sh
 ```
-The speech model (Parakeet) downloads on first launch, which takes about a minute. The app is signed locally, not by Apple, so macOS may ask you to confirm the first time you open it: right-click → Open.
+`setup.sh` checks your system, downloads the official llama.cpp release and the cleanup model (about 2.5 GB) into `~/Library/Application Support/Murmur`, builds Murmur, installs `~/Applications/Murmur.app` and opens it. No Homebrew needed. It is safe to re-run. Options: `--prefix DIR`, `--no-open`, `--accurate` (also installs Whisper for Accurate mode; needs Homebrew). If the Xcode Command Line Tools are missing it opens their installer and exits; finish that and run it again. The app is signed locally, not by Apple, so the first time macOS may ask you to right-click > Open.
+
+### Windows (beta)
+```
+git clone https://github.com/aidanmcjones/murmur && cd murmur
+powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
+```
+If SmartScreen warns about an unsigned app, choose More info > Run anyway. The Windows version is new and less polished than the Mac app.
+
+## Features
+- **Fast:** text is usually pasted 150-350 ms after you release the key. Speech recognition runs on the Apple Neural Engine.
+- **Clean:** removes filler words, applies self-corrections ("at three, no wait, four" -> "at 4"), writes numbers as digits, handles spoken punctuation, formats lists, and adapts to the app you are typing in (chat, email, terminal and AI tools).
+- **Self-learning vocabulary:** when you fix a misheard name or term right after dictating (for example "collab tree" -> "Kolabtree"), Murmur offers to remember it in a small pop-up. Accepted fixes are applied automatically from then on, including near-miss spellings. Menu toggles turn learning on or off; **Add word...** adds a term by hand; **Enable screen-text learning...** also notices corrections in apps Murmur cannot read directly, by reading the text on screen (needs Screen Recording permission; off by default).
+- **Custom push-to-talk key:** fn/Globe by default, or any modifier or F-key via the menu (Push-to-talk key > Set custom key...). Needed for many third-party keyboards.
+- **Snippets and vocabulary:** `dictionary.json`, plus import from Wispr Flow.
+- Inspired by Wispr Flow's experience and tuned against it black-box (see below). Not affiliated with Wispr.
+
+## Privacy
+Speech recognition and cleanup run on your computer with open models. There is no account, no telemetry, and your audio and text are never uploaded. The only network use is downloading models and the llama.cpp release during install and first launch (and the optional cloud cleanup provider if you enter your own API key). Vocabulary learning keeps only the word pairs you accept; screen-text learning reads the screen locally and sends nothing anywhere.
 
 ## Permissions
 On first launch, allow **Microphone** and **Accessibility**. Accessibility lets Murmur see the hotkey and paste. If dictation doesn't start, open Murmur's menu → **Check permissions**.

@@ -1,0 +1,59 @@
+name: macOS
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['windows/**', 'scripts/setup.ps1', '.github/workflows/windows.yml']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-install:
+    runs-on: macos-latest   # Apple Silicon
+    timeout-minutes: 45
+    env:
+      MURMUR_SUPPORT_DIR: ${{ github.workspace }}/../murmur-support
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache cleanup model
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MURMUR_SUPPORT_DIR }}/models
+          key: murmur-model-qwen3-4b-instruct-2507-q4_K_M
+
+      - name: Build
+        run: scripts/build.sh
+
+      - name: Learn self-test
+        run: build/Murmur.app/Contents/MacOS/Murmur --learn-selftest
+
+      - name: Test vectors (real Swift code vs shared/test-vectors)
+        run: build/Murmur.app/Contents/MacOS/Murmur --check-test-vectors shared/test-vectors
+
+      - name: --clean-text matches cleanup vectors
+        run: |
+          python3 -I - <<'PY'
+          import json, subprocess, sys
+          exe = "build/Murmur.app/Contents/MacOS/Murmur"
+          bad = 0
+          cases = json.load(open("shared/test-vectors/cleanup.json"))
+          for c in cases:
+              out = subprocess.run([exe, "--clean-text", c["input"], "--bundle-id", c["bundle_id"]],
+                                   capture_output=True, text=True).stdout.rstrip("\n")
+              if out != c["expected"].rstrip("\n"):
+                  bad += 1
+                  print("MISMATCH", repr(c["input"]), repr(out), repr(c["expected"]))
+          print(f"{len(cases) - bad}/{len(cases)} cleanup cases match")
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: Run setup.sh (installs llama.cpp, model, app)
+        run: scripts/setup.sh --no-open --prefix "$RUNNER_TEMP/Apps"
+
+      - name: Verify the installed copy
+        run: |
+          test -x "$MURMUR_SUPPORT_DIR/bin/llama-server"
+          test -f "$MURMUR_SUPPORT_DIR/models/qwen3-4b-instruct-2507-q4_K_M.gguf"
+          "$RUNNER_TEMP/Apps/Murmur.app/Contents/MacOS/Murmur" --learn-selftest
+          "$RUNNER_TEMP/Apps/Murmur.app/Contents/MacOS/Murmur" --clean-text "um so I I think so"
