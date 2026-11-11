@@ -130,6 +130,14 @@ pub fn start_in_background() {
         let t0 = Instant::now();
         let ok = ensure_running(Duration::from_secs(180));
         log(&format!("llm: background start ok={ok} after {} ms", t0.elapsed().as_millis()));
+        if ok {
+            // Prewarm the prompt cache with the shared system prompt + few-shot (first CPU prompt eval is slow).
+            let sys = murmur_core::cleanup::system_prompt("", "", &[]);
+            let msgs = murmur_core::cleanup::messages(&sys, &murmur_core::cleanup::wrap("ok"));
+            let t1 = Instant::now();
+            let _ = complete(&msgs, 1, Duration::from_secs(120));
+            log(&format!("llm: prewarm took {} ms", t1.elapsed().as_millis()));
+        }
     });
 }
 
