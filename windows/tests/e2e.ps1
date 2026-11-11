@@ -62,17 +62,34 @@ if ($hwnd -eq [IntPtr]::Zero) {
 [Win]::ForceForeground($hwnd)
 Start-Sleep -Milliseconds 800
 $root = [Windows.Automation.AutomationElement]::FromHandle($hwnd)
-$cond = New-Object Windows.Automation.OrCondition(
-    (New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty, [Windows.Automation.ControlType]::Document)),
-    (New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty, [Windows.Automation.ControlType]::Edit)))
+Write-Host ("Notepad window: '" + $root.Current.Name + "' class=" + $root.Current.ClassName + " pid=" + $root.Current.ProcessId)
+$script:editEl = $null
+function Find-Editor {
+    $all = $root.FindAll([Windows.Automation.TreeScope]::Descendants, [Windows.Automation.Condition]::TrueCondition)
+    $best = $null
+    foreach ($e in $all) {
+        $o = $null
+        $hasText = $e.TryGetCurrentPattern([Windows.Automation.TextPattern]::Pattern, [ref]$o)
+        $hasVal = $e.TryGetCurrentPattern([Windows.Automation.ValuePattern]::Pattern, [ref]$o)
+        $ct = $e.Current.ControlType.ProgrammaticName
+        if (($hasText -or $hasVal) -and ($ct -match 'Document|Edit')) { $best = $e; break }
+    }
+    if (-not $best) {
+        Write-Host "Elements seen:"
+        foreach ($e in $all) { Write-Host ("  " + $e.Current.ControlType.ProgrammaticName + " class=" + $e.Current.ClassName + " name='" + $e.Current.Name + "'") }
+    }
+    return $best
+}
 function Get-NotepadText {
-    $el = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $cond)
-    if (-not $el) { return $null }
+    if (-not $script:editEl) { $script:editEl = Find-Editor }
+    if (-not $script:editEl) { return $null }
     $o = $null
-    if ($el.TryGetCurrentPattern([Windows.Automation.TextPattern]::Pattern, [ref]$o)) { return $o.DocumentRange.GetText(-1) }
-    if ($el.TryGetCurrentPattern([Windows.Automation.ValuePattern]::Pattern, [ref]$o)) { return $o.Current.Value }
+    if ($script:editEl.TryGetCurrentPattern([Windows.Automation.TextPattern]::Pattern, [ref]$o)) { return $o.DocumentRange.GetText(-1) }
+    if ($script:editEl.TryGetCurrentPattern([Windows.Automation.ValuePattern]::Pattern, [ref]$o)) { return $o.Current.Value }
     return $null
 }
+$t0 = Get-Date
+while ($null -eq (Get-NotepadText) -and ((Get-Date) - $t0).TotalSeconds -lt 15) { Start-Sleep -Milliseconds 500 }
 if ($null -eq (Get-NotepadText)) { Fail 'cannot read Notepad text through UI Automation' }
 
 $env:MURMUR_APPDATA = $appdata
