@@ -23,9 +23,10 @@ $out = Join-Path $env:TEMP 'murmur-transcribe-out.txt'
 $err = Join-Path $env:TEMP 'murmur-transcribe-err.txt'
 $p = Start-Process -FilePath $Murmur -ArgumentList @('--transcribe', "`"$Wav`"") -Wait -PassThru -NoNewWindow `
     -RedirectStandardOutput $out -RedirectStandardError $err
-$text = (Get-Content -Raw $out).Trim()
+$text = ("" + (Get-Content -Raw $out)).Trim()
 Write-Host "exit=$($p.ExitCode) stdout='$text'"
 Write-Host ("stderr: " + (Get-Content -Raw $err))
+if (Test-Path "$env:MURMUR_APPDATA\debug.log") { Write-Host '--- debug.log ---'; Get-Content "$env:MURMUR_APPDATA\debug.log" | Select-Object -Last 30 }
 if ($p.ExitCode -ne 0) { throw "murmur --transcribe exited with $($p.ExitCode)" }
 $wer = Wer (Norm $Expected) (Norm $text)
 Write-Host "WER vs '$Expected' = $wer"
