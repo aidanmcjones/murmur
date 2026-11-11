@@ -189,6 +189,9 @@ enum VocabDiff {
         let intactEnd = wins.filter { $0.matched == pn }.map { $0.end }.max()
         for w in wins {
             if Date() > deadline { break }
+            if w.matched == pn { continue }  // intact copy: nothing was edited here
+            if let ie = intactEnd, ie >= w.end { continue }  // older than an intact copy nearer the prompt
+
             if short {  // cheap pre-filter: whole-string similarity of the pasted words vs the window
                 let a = tokenize(pasted).map { $0.word }, b = tokenize(w.text).map { $0.word }
                 if similarity(a, b) < 0.6 { continue }
@@ -301,6 +304,10 @@ enum VocabDiff {
         let older = "> an older note mentioning a collar here\n✶ Pondering\n│ > collab │\n"
         let g1 = describe(fuzzyCandidate(pasted: "collab", buffer: older.replacingOccurrences(of: "✶", with: "✻")))
         if g1 == "none" { print("PASS tui-intact-older-line") } else { fails += 1; print("FAIL tui-intact-older-line: \(g1)") }
+        // Live prompt intact "Collab tree", older scrollback line "Colab tree" (similar, not intact): no suggestion.
+        let olderSimilar = "> please file Colab tree notes\n✶ Thinking\n│ > Collab tree │\n"
+        let g1b = describe(fuzzyCandidate(pasted: "Collab tree", buffer: olderSimilar))
+        if g1b == "none" { print("PASS tui-intact-prompt-older-similar") } else { fails += 1; print("FAIL tui-intact-prompt-older-similar: \(g1b)") }
         // Older intact "Collab tree" in scrollback, live prompt edited: still suggests.
         let hist = tui("Collab tree", spinner: "✶").replacingOccurrences(of: "> earlier thing I asked about the repo", with: "> Collab tree")
         let g2 = describe(fuzzyCandidate(pasted: "Collab tree", buffer: hist.replacingOccurrences(of: "│ > Collab tree", with: "│ > Kolabtree")))
@@ -476,16 +483,16 @@ final class VocabLearner {
         }
     }
 
-    private var evaluating = false
+    /// Serial: evaluations run in order and none is dropped (each is bounded by the 50 ms fuzzy deadline).
+    private static let evalQueue = DispatchQueue(label: "murmur.vocab.eval", qos: .userInitiated)
 
     /// Reads the field on main, runs the heavy diff off-main, then shows the pop-up on main if the watch is still current.
     private func evaluateNow() {
-        guard !evaluating, let el = element, let v = value(el), (v as NSString).length <= Self.maxChars else { return }
-        evaluating = true
+        guard let el = element, let v = value(el), (v as NSString).length <= Self.maxChars else { return }
         let gen = generation
         let dict = UserDictionary.load(), rej = Settings.rejectedPairs
         let (snap, text, reg) = (snapshot, pasted, region)
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        Self.evalQueue.async { [weak self] in
             var found: VocabDiff.Candidate?
             var fuzzy = false
             if reg.0 >= 0,
@@ -499,7 +506,6 @@ final class VocabLearner {
             }
             DispatchQueue.main.async {
                 guard let self else { return }
-                self.evaluating = false
                 guard gen == self.generation, let c = found else { return }
                 if fuzzy { DebugLog.log("learn: fuzzy anchor") }
                 self.suggest(c)
