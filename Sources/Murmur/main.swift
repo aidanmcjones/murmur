@@ -2,6 +2,10 @@ import AppKit
 
 if CommandLine.arguments.contains("--learn-selftest") {
     exit(VocabDiff.selfTest())
+} else if let i = CommandLine.arguments.firstIndex(of: "--asr-boost-eval"), i + 1 < CommandLine.arguments.count {
+    let dir = CommandLine.arguments[i + 1]
+    Task { exit(await ParakeetEngine.boostEval(dir: dir)) }
+    dispatchMain()
 } else if CommandLine.arguments.contains("--learn-wfparity") {
     exit(VocabDiff.wfParity())
 } else if let i = CommandLine.arguments.firstIndex(of: "--learn-test") {
