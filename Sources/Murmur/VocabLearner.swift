@@ -267,7 +267,7 @@ final class VocabLearner {
         region = (start, start + len)
         dirtyAt = nil; startedAt = Date()
         var obs: AXObserver?
-        if AXObserverCreate(pid, { _, _, _, _ in VocabLearner.shared.poll() }, &obs) == .success, let o = obs {
+        if AXObserverCreate(pid, { _, _, _, _ in VocabLearner.shared.markDirty() }, &obs) == .success, let o = obs {
             AXObserverAddNotification(o, el, kAXValueChangedNotification as CFString, nil)
             CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(o), .defaultMode)
             observer = o
@@ -280,13 +280,16 @@ final class VocabLearner {
     /// Ends the current watch (new dictation, focus moved, timeout). Evaluates once if there are pending edits.
     func stop(evaluate: Bool = false) {
         generation += 1
-        if evaluate, element != nil, dirtyAt != nil { _ = evaluateNow() }
+        if evaluate, element != nil { _ = evaluateNow() }
         timer?.invalidate(); timer = nil
         if let o = observer {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(o), .defaultMode)
         }
         observer = nil; element = nil; dirtyAt = nil
     }
+
+    /// Called per keystroke by the AX observer: cheap, no AX reads (large fields would stutter typing).
+    private func markDirty() { if element != nil { dirtyAt = Date() } }
 
     private func poll() {
         guard let el = element else { return }
