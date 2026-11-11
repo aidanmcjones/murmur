@@ -31,6 +31,7 @@ final class Hotkey {
         }
         let mask: CGEventMask = (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
             | (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.rightMouseDown.rawValue)
+            | (1 << CGEventType.leftMouseUp.rawValue)
         let cb: CGEventTapCallBack = { _, type, event, refcon in
             let me = Unmanaged<Hotkey>.fromOpaque(refcon!).takeUnretainedValue()
             return me.handle(type, event)
@@ -134,7 +135,12 @@ final class Hotkey {
             if VocabLearner.shared.recording { VocabLearner.shared.observeKey(code: code, flags: event.flags, event: event) }
             return pass
         case .leftMouseDown, .rightMouseDown:
-            if VocabLearner.shared.recording { VocabLearner.shared.observeMouse() }
+            if VocabLearner.shared.recording { VocabLearner.shared.observeMouse(right: type == .rightMouseDown) }
+            return pass
+        case .leftMouseUp:
+            if VocabLearner.shared.recording {
+                VocabLearner.shared.observeMouseUp(clicks: Int(event.getIntegerValueField(.mouseEventClickState)))
+            }
             return pass
         default:
             return pass

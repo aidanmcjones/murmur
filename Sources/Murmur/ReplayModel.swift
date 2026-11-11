@@ -9,9 +9,39 @@ struct ReplayModel {
         case text(String), backspace, forwardDelete, deleteWord, deleteLine
         case move(Move, select: Bool)
         case selectAll, undo, unsupported
+        /// A selection reported by AX after a mouse selection, Cmd+A or a shift-move past the pasted text.
+        case select(Selection)
     }
 
-    private let original: String
+    /// AXSelectedText and/or AXSelectedTextRange. `start`/`end` are UTF-16 offsets relative to the start of the
+    /// original paste in the field (negative = before it); they are only set when the AX value is readable.
+    /// `via` (mouse, double_click, cmd_a, shift_word_left...) is informational.
+    struct Selection: Equatable {
+        var text: String?
+        var start: Int?
+        var end: Int?
+        var via: String
+
+        init(text: String?, start: Int? = nil, end: Int? = nil, via: String) {
+            self.text = text; self.start = start; self.end = end; self.via = via
+        }
+
+        /// From an absolute AX range: relative offsets only when the paste's start in the AX value is known.
+        static func fromAX(text: String?, location: Int?, length: Int?, regionStart: Int, via: String) -> Selection? {
+            var s = Selection(text: text, via: via)
+            if regionStart >= 0, let l = location, let n = length, l >= 0, n >= 0 { s.start = l - regionStart; s.end = l + n - regionStart }
+            return s.text == nil && s.start == nil ? nil : s
+        }
+    }
+
+    private let pastedText: String
+    /// The paste plus neighbouring text learned from a selection that crossed its boundary.
+    private var original: String
+    /// Characters of `original` before / after the paste.
+    private(set) var lead = 0
+    private(set) var trail = 0
+    /// UTF-16 offset of `chars[0]` relative to the start of the original paste (<= 0).
+    private var origin = 0
     private(set) var chars: [Character]
     private(set) var cursor: Int
     private(set) var anchor: Int
@@ -24,6 +54,7 @@ struct ReplayModel {
     private(set) var counts = (text: 0, delete: 0, nav: 0, mouse: 0, other: 0)
 
     init(_ pasted: String) {
+        pastedText = pasted
         original = pasted
         chars = Array(pasted)
         cursor = chars.count
@@ -35,6 +66,25 @@ struct ReplayModel {
         if discarded { return nil }
         let s = String(chars)
         return s == original ? nil : s
+    }
+
+    /// What `result` is diffed against: the paste, extended by any neighbouring text a selection revealed.
+    var baseText: String { original }
+
+    /// The candidate for the replayed edit. With neighbouring text in the base, the heard words must touch the
+    /// paste itself (a selection outside it must not produce a suggestion about unrelated text).
+    func candidate(dictionary: [DictEntry] = [], rejected: Set<String> = []) -> VocabDiff.Candidate? {
+        guard let r = result, let c = VocabDiff.candidate(pasted: original, edited: r, dictionary: dictionary, rejected: rejected)
+        else { return nil }
+        if lead == 0 && trail == 0 { return c }
+        let base = Array(original), h = Array(c.heard)
+        let span = lead..<(base.count - trail)
+        guard !h.isEmpty, h.count <= base.count else { return nil }
+        func eq(_ a: Character, _ b: Character) -> Bool { a == b || a.lowercased() == b.lowercased() }
+        for i in 0...(base.count - h.count) where (0..<h.count).allSatisfy({ eq(base[i + $0], h[$0]) }) {
+            if i < span.upperBound && i + h.count > span.lowerBound { return c }
+        }
+        return nil
     }
 
     private var sel: Range<Int> { min(anchor, cursor)..<max(anchor, cursor) }
@@ -123,16 +173,107 @@ struct ReplayModel {
             case .right: target = (!select && hasSel) ? sel.upperBound : (cursor < chars.count ? cursor + 1 : nil)
             case .wordLeft: target = (!select && hasSel) || cursor == 0 ? nil : wordLeft(cursor)
             case .wordRight: target = (!select && hasSel) || cursor >= chars.count ? nil : wordRight(cursor)
-            case .lineStart: target = lineStart(cursor)
-            case .lineEnd: target = lineEnd(cursor)
+            case .lineStart: target = lineStart(select ? cursor : sel.lowerBound)
+            case .lineEnd: target = lineEnd(select ? cursor : sel.upperBound)
             }
             guard let t = target else { freeze("boundary"); return }
             cursor = t
             if !select { anchor = t }
         case .selectAll: counts.other += 1; freeze("select-all")
+        case .select(let s): counts.nav += 1; select(s)
         case .undo: counts.other += 1; freeze("undo", discard: true)
         case .unsupported: counts.other += 1; freeze("unsupported")
         }
+    }
+
+    /// UTF-16 offset (relative to `chars[0]`) -> character index; nil inside a character or out of range.
+    private func charIndex(utf16 u: Int) -> Int? {
+        var acc = 0
+        for (i, c) in chars.enumerated() {
+            if acc == u { return i }
+            if acc > u { return nil }
+            acc += c.utf16.count
+        }
+        return acc == u ? chars.count : nil
+    }
+
+    private func occurrences(of t: [Character], in hay: [Character]) -> [Int] {
+        guard !t.isEmpty, t.count <= hay.count else { return [] }
+        return (0...(hay.count - t.count)).filter { i in (0..<t.count).allSatisfy { hay[i + $0] == t[$0] } }
+    }
+
+    /// Splits `text` into UTF-16 prefix / middle / suffix; nil when a cut falls inside a character.
+    private static func split(_ text: String, before: Int, after: Int) -> ([Character], [Character], [Character])? {
+        let u = Array(text.utf16)
+        guard before >= 0, after >= 0, before + after <= u.count else { return nil }
+        let parts = [u[0..<before], u[before..<(u.count - after)], u[(u.count - after)...]].map { String(utf16CodeUnits: Array($0), count: $0.count) }
+        guard parts.map({ $0.utf16.count }) == [before, u.count - before - after, after], parts.joined() == text else { return nil }
+        return (Array(parts[0]), Array(parts[1]), Array(parts[2]))
+    }
+
+    /// Adds neighbouring text (revealed by a selection crossing the paste's boundary) to the model and the base.
+    private mutating func extend(before: [Character], after: [Character]) {
+        if !before.isEmpty {
+            chars.insert(contentsOf: before, at: 0)
+            original = String(before) + original
+            lead += before.count
+            origin -= String(before).utf16.count
+            cursor += before.count; anchor += before.count
+        }
+        if !after.isEmpty {
+            chars.append(contentsOf: after)
+            original += String(after)
+            trail += after.count
+        }
+    }
+
+    /// Keeps the selection's direction: a lookup after shift+left that kept the old anchor at its end leaves the
+    /// caret at the start, so further shift-moves extend the right end.
+    private mutating func setSelection(_ lo: Int, _ hi: Int) {
+        if lo != hi, anchor == hi { cursor = lo } else { anchor = lo; cursor = hi }
+    }
+
+    /// Sets the selection reported by AX. Prefers the relative range; falls back to locating the selected text
+    /// (the occurrence nearest the caret). A selection wholly outside the known text freezes the model.
+    private mutating func select(_ s: Selection) {
+        if let a = s.start, let b = s.end, a <= b {
+            let u0 = a - origin, u1 = b - origin, total = String(chars).utf16.count
+            if u1 < 0 || u0 > total || (u0 != u1 && (u1 <= 0 || u0 >= total)) { freeze("select-outside"); return }
+            if u0 >= 0, u1 <= total, let i0 = charIndex(utf16: u0), let i1 = charIndex(utf16: u1),
+               s.text == nil || String(chars[i0..<i1]) == s.text {
+                setSelection(i0, i1); return
+            }
+            // Crossing the boundary: the selected text supplies the neighbouring characters.
+            if let t = s.text, t.utf16.count == u1 - u0, u0 < 0 || u1 > total,
+               let (pre, mid, post) = Self.split(t, before: max(0, -u0), after: max(0, u1 - total)),
+               let i0 = charIndex(utf16: max(0, u0)), let i1 = charIndex(utf16: min(total, u1)),
+               Array(chars[i0..<i1]) == mid,
+               (pre.isEmpty || i0 == 0), (post.isEmpty || i1 == chars.count) {
+                extend(before: pre, after: post)
+                setSelection(pre.isEmpty ? i0 : 0, (pre.isEmpty ? i0 : 0) + pre.count + mid.count + post.count)
+                return
+            }
+        }
+        guard let text = s.text, !text.isEmpty else { freeze("select-unknown"); return }
+        let t = Array(text)
+        let hits = occurrences(of: t, in: chars)
+        if !hits.isEmpty {
+            let here = sel
+            func dist(_ i: Int) -> Int { max(0, i - here.upperBound, here.lowerBound - (i + t.count)) }
+            let best = hits.map(dist).min()!
+            let at = hits.filter { dist($0) == best }
+            // Equally near occurrences hold the same text, so either gives the same heard/wanted.
+            setSelection(at[0], at[0] + t.count)
+            return
+        }
+        // The selection covers the whole paste (e.g. Cmd+A in a field holding more text).
+        let whole = occurrences(of: chars, in: t)
+        if whole.count == 1, !chars.isEmpty {
+            extend(before: Array(t[0..<whole[0]]), after: Array(t[(whole[0] + chars.count)...]))
+            setSelection(0, chars.count)
+            return
+        }
+        freeze(whole.count > 1 ? "select-ambiguous" : "select-outside")
     }
 
     /// A click moves the caret somewhere unknown. With `lookup`, events queue until `resolveCaret`.
@@ -152,6 +293,38 @@ struct ReplayModel {
         anchor = l
         cursor = l + length
         for e in q { apply(e) }
+    }
+
+    /// Starts an AX selection lookup (mouse-down, Cmd+A, shift-move past the paste): keys queue until `resolve`.
+    mutating func awaitSelection() {
+        if frozen != nil { return }
+        awaitingCaret = true
+    }
+
+    var awaiting: Bool { awaitingCaret }
+
+    /// Applies the looked-up selection (it already reflects the triggering key), then the queued keys.
+    /// When AX had nothing, `fallback` (the triggering key) is replayed instead, else the model freezes with `failKind`.
+    mutating func resolve(_ s: Selection?, fallback: Event? = nil, failKind: String) {
+        guard awaitingCaret else { return }
+        awaitingCaret = false
+        let q = queue
+        queue = []
+        if let s { apply(.select(s)) } else if let f = fallback { apply(f) } else { freeze(failKind); return }
+        for e in q { apply(e) }
+    }
+
+    /// True when the model cannot place this selection itself and the learner should ask AX: a shift-move that
+    /// leaves the known text, or shift+Cmd+left/right (soft-wrapped lines end where only the app knows).
+    func selectionNeedsLookup(_ e: Event) -> Bool {
+        guard frozen == nil, !awaitingCaret else { return false }
+        if e == .selectAll { return true }
+        guard case .move(let m, true) = e else { return false }
+        switch m {
+        case .left, .wordLeft: return cursor == 0
+        case .right, .wordRight: return cursor >= chars.count
+        case .lineStart, .lineEnd: return true
+        }
     }
 
     /// Maps a key press to a model event; nil means "ignore" (harmless).
@@ -288,6 +461,126 @@ struct ReplayModel {
         if let img = ScreenOCR.render("take control of my Kolabtree tab"), let t = ScreenOCR.recognize(img) {
             check("ocr-render", t.lowercased().contains("control") && t.lowercased().contains("tab"), t)
         } else { check("ocr-render", false, "no result") }
-        return fails + ScreenOCR.selfTest()
+        return fails + ScreenOCR.selfTest() + selectionSelfTest()
+    }
+
+    /// Corrections made by selecting text: every selection method x (a) type over it / (b) delete then type.
+    static func selectionSelfTest() -> Int {
+        var fails = 0
+        func check(_ name: String, _ ok: Bool, _ detail: String = "") {
+            if !ok { fails += 1 }
+            print("\(ok ? "PASS" : "FAIL") select-\(name)\(ok ? "" : " \(detail)")")
+        }
+        func sel(_ t: String?, _ r: [Int]? = nil, _ via: String = "mouse") -> Event { .select(.init(text: t, start: r?[0], end: r?[1], via: via)) }
+        let p = "take control of my collab tree tab", fixed = "take control of my Kolabtree tab", kola = "collab tree -> Kolabtree"
+        let shiftL = Event.move(.left, select: true), shiftR = Event.move(.right, select: true)
+        let left = Event.move(.left, select: false), wl = Event.move(.wordLeft, select: false)
+        func run(_ name: String, _ start: String, _ evs: [Event], result: String?, cand: String, frozen: String? = nil) {
+            var m = ReplayModel(start)
+            for e in evs { m.apply(e) }
+            let got = VocabDiff.describe(m.candidate())
+            check(name, m.result == result && got == cand && m.frozen == frozen,
+                  "result=\(m.result ?? "nil") cand=\(got) frozen=\(m.frozen ?? "no")")
+        }
+        let typeA = [Event.text("Kolabtree")], typeB = [Event.backspace, .text("Kolabtree")]
+        for (variant, tail) in [("a", typeA), ("b", typeB)] {
+            run("drag-range-\(variant)", p, [sel("collab tree", [19, 30])] + tail, result: fixed, cand: kola)
+            run("drag-text-only-\(variant)", p, [sel("collab tree")] + tail, result: fixed, cand: kola)
+            run("double-click-\(variant)", p, [sel("collab", [19, 25], "double_click")] + tail + [sel("tree", [29, 33], "double_click"), .backspace, .backspace],
+                result: fixed, cand: kola)
+            run("triple-click-\(variant)", p, [sel(p, [0, 34], "triple_click")] + (variant == "a" ? [] : [.backspace]) + [.text(fixed)],
+                result: fixed, cand: kola)
+            run("cmd-a-\(variant)", "collab tree", [sel("Notes: collab tree, ok", nil, "cmd_a")] + (variant == "a" ? [] : [.backspace])
+                + [.text("Notes: Kolabtree, ok")], result: "Notes: Kolabtree, ok", cand: kola)
+            run("shift-left-\(variant)", p, Array(repeating: left, count: 4) + Array(repeating: shiftL, count: 11) + tail, result: fixed, cand: kola)
+            run("shift-right-\(variant)", p, Array(repeating: left, count: 15) + Array(repeating: shiftR, count: 11) + tail, result: fixed, cand: kola)
+            run("shift-opt-left-\(variant)", p, Array(repeating: Event.move(.wordLeft, select: true), count: 3)
+                + (variant == "a" ? [] : [.backspace]) + [.text("Kolabtree tab")], result: fixed, cand: kola)
+            run("shift-opt-right-\(variant)", p, [wl, wl, wl, .move(.wordRight, select: true), .move(.wordRight, select: true)] + tail,
+                result: fixed, cand: kola)
+            run("shift-cmd-left-\(variant)", "note\ncollab tree", [.move(.lineStart, select: true)] + tail, result: "note\nKolabtree", cand: kola)
+            run("shift-cmd-left-ax-\(variant)", "collab tree", [sel("say collab tree", [-4, 11], "shift_lineStart")]
+                + (variant == "a" ? [] : [.backspace]) + [.text("say Kolabtree")], result: "say Kolabtree", cand: kola)
+            run("shift-cmd-right-\(variant)", "x\ncollab tree\nok", [left, left, left, .move(.lineStart, select: false), .move(.lineEnd, select: true)]
+                + tail, result: "x\nKolabtree\nok", cand: kola)
+            run("across-start-\(variant)", "tree tab", [sel("collab tree", [-7, 4])] + tail, result: "Kolabtree tab", cand: kola)
+            run("across-end-\(variant)", "my collab", [sel("collab tree", [3, 14])] + tail, result: "my Kolabtree", cand: kola)
+        }
+        // Shift-move past the paste: the model asks for an AX lookup, then continues with the reported selection.
+        var m = ReplayModel("tree tab")
+        for e in [wl, .move(.wordLeft, select: true)] { m.apply(e) }
+        check("boundary-needs-lookup", m.selectionNeedsLookup(.move(.wordLeft, select: true)) && !m.selectionNeedsLookup(.move(.wordRight, select: true)))
+        m.awaitSelection()
+        m.apply(.text("Kolabtree "))  // typed before the lookup returned: queued
+        m.resolve(.init(text: "collab tree ", start: -7, end: 5, via: "shift_wordLeft"), failKind: "select")
+        check("boundary-lookup-resolves", m.result == "Kolabtree tab" && m.baseText == "collab tree tab" && m.frozen == nil
+              && VocabDiff.describe(m.candidate()) == kola, "\(m.result ?? "nil")")
+        m = ReplayModel("tree tab")
+        for e in [wl, wl] { m.apply(e) }
+        m.awaitSelection()
+        m.resolve(nil, fallback: .move(.wordLeft, select: true), failKind: "select")
+        check("boundary-lookup-failed-falls-back", m.frozen == "boundary")
+        m = ReplayModel(p)
+        check("cmd-a-needs-lookup", m.selectionNeedsLookup(.selectAll) && m.selectionNeedsLookup(.move(.lineStart, select: true)))
+        m.awaitSelection()
+        m.resolve(nil, fallback: .selectAll, failKind: "select")
+        check("cmd-a-lookup-failed-uncertain", m.frozen == "select-all" && m.result == nil)
+        m = ReplayModel(p)
+        m.awaitSelection()
+        m.resolve(nil, failKind: "mouse")
+        check("mouse-lookup-failed-uncertain", m.frozen == "mouse")
+        // Partial word and multi-word phrase.
+        run("partial-word", p, [sel("ollab", [20, 25]), .text("olab")], result: "take control of my colab tree tab", cand: "collab -> colab")
+        run("partial-two-words", p, [sel("collab tr", [19, 28]), .text("Kolabtr")], result: fixed, cand: kola)
+        // Selections outside the paste never yield a suggestion about unrelated text.
+        run("outside-range", "collab tree", [sel("Hello", [-12, -7]), .text("Hi")], result: nil, cand: "none", frozen: "select-outside")
+        run("outside-adjacent", "collab tree", [sel("Hello ", [-6, 0]), .text("Hi ")], result: nil, cand: "none", frozen: "select-outside")
+        run("outside-text-only", "collab tree", [sel("unrelated"), .text("other")], result: nil, cand: "none", frozen: "select-outside")
+        run("outside-after-edit", p, [.backspace, sel("elsewhere"), .text("x")], result: "take control of my collab tree ta", cand: "tab -> ta",
+            frozen: "select-outside")  // the earlier certain edit is kept; nothing about the outside text
+        run("across-edit-only-outside", "collab tree tab", [sel("Hello c", [-6, 1]), .text("Hi c")], result: "Hi collab tree tab", cand: "none")
+        // Undo after replacing a selection: uncertain, discarded.
+        run("undo-after-replace", p, [sel("collab tree", [19, 30]), .text("Kolabtree"), .undo], result: nil, cand: "none", frozen: "undo")
+        // Arrows without shift collapse the selection.
+        run("arrow-left-collapses", p, [sel("collab tree", [19, 30]), left, .text("the ")], result: "take control of my the collab tree tab",
+            cand: VocabDiff.describe(VocabDiff.candidate(pasted: p, edited: "take control of my the collab tree tab")))
+        run("arrow-right-collapses", p, [sel("collab", [19, 25]), .move(.right, select: false), .text("s")],
+            result: "take control of my collabs tree tab", cand: VocabDiff.describe(VocabDiff.candidate(pasted: p, edited: "take control of my collabs tree tab")))
+        run("cmd-left-collapses-to-start", "a\nbc de", [sel("de", [5, 7]), .move(.lineStart, select: false), .text("X")], result: "a\nXbc de",
+            cand: VocabDiff.describe(VocabDiff.candidate(pasted: "a\nbc de", edited: "a\nXbc de")))
+        // Caret clicks and ambiguous text.
+        run("click-caret", p, [sel("", [15, 15]), .text(" my")], result: "take control of my my collab tree tab",
+            cand: VocabDiff.describe(VocabDiff.candidate(pasted: p, edited: "take control of my my collab tree tab")))
+        run("click-no-info", p, [sel("", nil), .text("x")], result: nil, cand: "none", frozen: "select-unknown")
+        run("repeated-word-nearest", "the cat and the dog", [left, left, left, left, sel("the", nil, "double_click"), .text("a")],
+            result: "the cat and a dog", cand: VocabDiff.describe(VocabDiff.candidate(pasted: "the cat and the dog", edited: "the cat and a dog")))
+        run("range-mismatch-uses-text", p, [sel("collab tree", [0, 11]), .text("Kolabtree")], result: fixed, cand: kola)
+        run("emoji-utf16-range", "go 😀 collab tree", [sel("collab tree", [6, 17]), .text("Kolabtree")], result: "go 😀 Kolabtree", cand: kola)
+        // AX selection read from mock trees -> model; and the AX diff tier on the same edits (AX-readable apps).
+        let before = "Notes: take control of my collab tree tab, ok"
+        let field = AXRead.Fake(["AXRole": "AXTextArea", "AXValue": before, "AXSelectedText": "collab tree",
+                                 "AXSelectedTextRange": AXRead.rangeValue(26, 11)])
+        let r = AXRead.selection(field)
+        let s1 = Selection.fromAX(text: r.text, location: r.range?.location, length: r.range?.length, regionStart: 7, via: "mouse")
+        check("ax-mock-selection", s1 == Selection(text: "collab tree", start: 19, end: 30, via: "mouse"), "\(String(describing: s1))")
+        m = ReplayModel(p)
+        if let s1 { m.apply(.select(s1)) }
+        m.apply(.text("Kolabtree"))
+        check("ax-mock-replay", VocabDiff.describe(m.candidate()) == kola)
+        let s2 = Selection.fromAX(text: r.text, location: r.range?.location, length: r.range?.length, regionStart: -1, via: "mouse")
+        check("ax-mock-unreadable-text-only", s2?.start == nil && s2?.text == "collab tree")
+        check("ax-mock-nothing", Selection.fromAX(text: nil, location: nil, length: nil, regionStart: 7, via: "mouse") == nil
+              && AXRead.selection(AXRead.Fake(["AXRole": "AXTextArea"])).range == nil)
+        check("ax-mock-deadline-skips-text", AXRead.selection(field, deadline: .distantPast).text == nil)
+        let afterA = "Notes: take control of my Kolabtree tab, ok"
+        let (cMid, _) = VocabDiff.axCandidate(pasted: p, snapshot: before, now: "Notes: take control of my  tab, ok", region: (7, 41))
+        check("ax-diff-after-delete-none", cMid == nil, VocabDiff.describe(cMid))
+        for (name, after, snapRegion) in [("ax-diff-replace-selection", afterA, (7, 41)), ("ax-diff-fuzzy-region", afterA, (-1, -1))] {
+            let (c, tier) = VocabDiff.axCandidate(pasted: p, snapshot: before, now: after, region: snapRegion)
+            check(name, VocabDiff.describe(c) == kola, "\(VocabDiff.describe(c)) \(tier)")
+        }
+        let (cOut, _) = VocabDiff.axCandidate(pasted: p, snapshot: before, now: "Hi: take control of my collab tree tab, ok", region: (7, 41))
+        check("ax-diff-outside-none", cOut == nil, VocabDiff.describe(cOut))
+        return fails
     }
 }

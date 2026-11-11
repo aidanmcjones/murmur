@@ -184,6 +184,48 @@ enum TestVectors {
             ("copy me", [.text("")]),
             ("café menu", [.move(.wordLeft, select: false), .move(.left, select: false), .backspace, .text("é")]),
             ("hello wrld", [.backspace, .backspace, .backspace, .text("orld")]),
+        ] + selectionCases
+    }()
+
+    /// Selection corrections: `select` events are what AX reported after a mouse selection, Cmd+A or a shift-move
+    /// past the paste (range = UTF-16 offsets relative to the paste's start, only when the AX value is readable).
+    static let selectionCases: [(String, [Ev])] = {
+        let p = "take control of my collab tree tab"
+        func sel(_ t: String?, _ r: [Int]? = nil, _ via: String) -> Ev { .select(.init(text: t, start: r?[0], end: r?[1], via: via)) }
+        let shiftL = Ev.move(.left, select: true), shiftR = Ev.move(.right, select: true)
+        return [
+            (p, [sel("collab tree", [19, 30], "mouse"), .text("Kolabtree")]),
+            (p, [sel("collab tree", nil, "mouse"), .backspace, .text("Kolabtree")]),
+            (p, [sel("collab", [19, 25], "double_click"), .text("Kolab")]),
+            (p, [sel("collab", nil, "double_click"), .forwardDelete, .text("Kolab")]),
+            (p, [sel(p, [0, 34], "triple_click"), .text("take control of my Kolabtree tab")]),
+            (p, [sel(p, nil, "cmd_a"), .backspace, .text("take control of my Kolabtree tab")]),
+            ("collab tree", [sel("Notes: collab tree", [-7, 11], "cmd_a"), .text("Notes: Kolabtree")]),
+            ("collab tree", [sel("Notes: collab tree, ok", nil, "cmd_a"), .text("Notes: Kolabtree, ok")]),
+            (p, [sel("ollab", [20, 25], "mouse"), .text("olab")]),
+            (p, [sel("collab tr", [19, 28], "mouse"), .text("Kolabtr")]),
+            ("my collab", [sel("collab tree", [3, 14], "mouse"), .text("Kolabtree")]),
+            ("tree tab", [sel("collab tree", [-7, 4], "mouse"), .backspace, .text("Kolabtree")]),
+            ("collab tree", [sel("Hello", [-12, -7], "mouse"), .text("Hi")]),
+            ("collab tree", [sel("Hello ", [-6, 0], "mouse"), .text("Hi ")]),
+            ("collab tree", [sel("unrelated", nil, "mouse"), .text("other")]),
+            ("tree tab", [sel("Hello my collab", [-15, 0], "mouse"), .text("Hi")]),
+            (p, [sel("collab tree", [19, 30], "mouse"), .text("Kolabtree"), .undo]),
+            (p, [sel("collab tree", [19, 30], "mouse"), .move(.left, select: false), .text("the ")]),
+            (p, [sel("collab tree", [19, 30], "mouse"), .move(.right, select: false), .text("s")]),
+            (p, [.move(.wordLeft, select: false), shiftL, .move(.left, select: false), .text("x")]),
+            (p, [.move(.wordLeft, select: false), .move(.wordLeft, select: true), .move(.wordLeft, select: true), .text("Kolabtree ")]),
+            (p, [.move(.wordLeft, select: false), .move(.wordLeft, select: true), .move(.wordLeft, select: true), .backspace, .text("Kolabtree ")]),
+            (p, Array(repeating: Ev.move(.left, select: false), count: 15) + Array(repeating: shiftR, count: 11) + [.text("Kolabtree")]),
+            ("collab tree", [sel("collab tree", [0, 11], "shift_lineStart"), .text("Kolabtree")]),
+            ("collab tree", [sel("say collab tree", [-4, 11], "shift_lineStart"), .backspace, .text("say Kolabtree")]),
+            ("my collab", [.move(.wordLeft, select: true), sel("my collab tree", [0, 14], "shift_lineEnd"), .text("my Kolabtree")]),
+            ("tree", [.move(.wordLeft, select: false), shiftR, shiftR, .move(.left, select: false),
+                      sel("collab tree", [-7, 4], "shift_wordLeft"), .text("Kolabtree")]),
+            (p, [sel("", [34, 34], "mouse"), .text("!")]),
+            (p, [sel("", [19, 19], "mouse"), .text("my ")]),
+            (p, [sel("", nil, "mouse"), .text("x")]),
+            ("the cat and the dog", [sel("the", nil, "double_click"), .text("a")]),
         ]
     }()
 
@@ -197,6 +239,10 @@ enum TestVectors {
         case .selectAll: return ["type": "select_all"]
         case .undo: return ["type": "undo"]
         case .unsupported: return ["type": "unsupported"]
+        case .select(let s):
+            var d: [String: Any] = ["type": "select", "text": s.text.map { $0 as Any } ?? NSNull(), "via": s.via]
+            if let a = s.start, let b = s.end { d["range"] = [a, b] }
+            return d
         case .move(let m, let sel):
             let name: String
             switch m {
@@ -225,9 +271,11 @@ enum TestVectors {
             var m = ReplayModel(pasted)
             for e in evs { m.apply(e) }
             let res = m.result
-            out.append(["kind": "replay", "pasted": pasted, "events": evs.map(eventJSON),
-                        "result": res.map { $0 as Any } ?? NSNull(), "frozen": m.frozen.map { $0 as Any } ?? NSNull(),
-                        "expected": candJSON(res.flatMap { VocabDiff.candidate(pasted: pasted, edited: $0) })])
+            var c: [String: Any] = ["kind": "replay", "pasted": pasted, "events": evs.map(eventJSON),
+                                    "result": res.map { $0 as Any } ?? NSNull(), "frozen": m.frozen.map { $0 as Any } ?? NSNull(),
+                                    "expected": candJSON(m.candidate())]
+            if m.baseText != pasted { c["base"] = m.baseText }
+            out.append(c)
         }
         return out
     }
@@ -373,6 +421,7 @@ enum TestVectors {
                 default:
                     guard i < fresh.count else { fail("\(name)[\(i)]: extra case"); continue }
                     got = fresh[i]["expected"] ?? NSNull()
+                    if canon(fresh[i]) != canon(c) { fail("\(name)[\(i)]: case differs from the real code (events, result, frozen or base)") }
                 }
                 if canon(got) != canon(want) { fail("\(name)[\(i)]: got \(got) want \(want)") }
             }

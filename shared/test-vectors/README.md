@@ -4,3 +4,24 @@ Verify with `Murmur --check-test-vectors shared/test-vectors`. Do not hand-edit.
 - cleanup.json: `input`, `bundle_id` -> `expected` is the deterministic (non-LLM) cleanup. `needs_llm` marks transcripts the app would also send to the LLM (self-corrections, numbers, spoken punctuation, lists); `style` is the app style key.
 - learn.json: `kind: candidate` (pasted, edited -> expected heard/wanted or null) and `kind: replay` (key events applied to pasted -> result, frozen, expected candidate).
 - dictionary.json: `entries` (+ `before` text) applied to `input` -> `expected` (exact and fuzzy learned replacements).
+
+### learn.json replay events
+
+`events` is an ordered list; each object has a `type`:
+
+| type | fields | meaning |
+| --- | --- | --- |
+| `text` | `text` | typed characters (replace any selection) |
+| `backspace`, `forward_delete` | | delete the selection, else one character |
+| `delete_word`, `delete_line` | | Option/Cmd+Backspace (delete the selection if any) |
+| `move` | `move` (`left`, `right`, `word_left`, `word_right`, `line_start`, `line_end`), `select` (bool) | arrows; without `select` an existing selection collapses (left/right/line moves to its start/end) |
+| `select_all`, `undo`, `unsupported` | | Cmd+A without an AX lookup, Cmd+Z, anything else: the model becomes uncertain (`frozen`) |
+| `select` | `text` (string or null), optional `range` [start, end], `via` | the selection AX reported after a mouse drag / double / triple click, Cmd+A or a shift-move past the paste |
+
+`select` semantics (see `ReplayModel.select`):
+- `range` is in UTF-16 code units relative to the start of the original paste in the field (negative = before it); it is only present when the field's AX value was readable. `via` (`mouse`, `double_click`, `triple_click`, `cmd_a`, `shift_lineStart`, ...) is informational.
+- A range inside the known text selects it (if `text` disagrees, fall back to locating `text`). A range that crosses the paste's start/end takes the neighbouring characters from `text` and adds them to the model; the case then carries `base` (paste plus those characters) and `expected` is the candidate for `base -> result`, kept only when the heard words overlap the paste itself.
+- Without a usable range: the occurrence of `text` nearest the current caret/selection; else, if `text` contains the whole known text once (Cmd+A in a larger field), both sides are added; else the model freezes `select-outside`.
+- A selection wholly outside the known text (including one just touching its edge) freezes `select-outside`; empty `text` with no range freezes `select-unknown`.
+
+Older consumers that ignore `base` and `select` still read every pre-existing case unchanged.

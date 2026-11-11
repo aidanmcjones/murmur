@@ -1908,5 +1908,921 @@
     "kind" : "replay",
     "pasted" : "hello wrld",
     "result" : "hello world"
+  },
+  {
+    "events" : [
+      {
+        "range" : [
+          19,
+          30
+        ],
+        "text" : "collab tree",
+        "type" : "select",
+        "via" : "mouse"
+      },
+      {
+        "text" : "Kolabtree",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my Kolabtree tab"
+  },
+  {
+    "events" : [
+      {
+        "text" : "collab tree",
+        "type" : "select",
+        "via" : "mouse"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "Kolabtree",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my Kolabtree tab"
+  },
+  {
+    "events" : [
+      {
+        "range" : [
+          19,
+          25
+        ],
+        "text" : "collab",
+        "type" : "select",
+        "via" : "double_click"
+      },
+      {
+        "text" : "Kolab",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab",
+      "wanted" : "Kolab"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my Kolab tree tab"
+  },
+  {
+    "events" : [
+      {
+        "text" : "collab",
+        "type" : "select",
+        "via" : "double_click"
+      },
+      {
+        "type" : "forward_delete"
+      },
+      {
+        "text" : "Kolab",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab",
+      "wanted" : "Kolab"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my Kolab tree tab"
+  },
+  {
+    "events" : [
+      {
+        "range" : [
+          0,
+          34
+        ],
+        "text" : "take control of my collab tree tab",
+        "type" : "select",
+        "via" : "triple_click"
+      },
+      {
+        "text" : "take control of my Kolabtree tab",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my Kolabtree tab"
+  },
+  {
+    "events" : [
+      {
+        "text" : "take control of my collab tree tab",
+        "type" : "select",
+        "via" : "cmd_a"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "take control of my Kolabtree tab",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my Kolabtree tab"
+  },
+  {
+    "base" : "Notes: collab tree",
+    "events" : [
+      {
+        "range" : [
+          -7,
+          11
+        ],
+        "text" : "Notes: collab tree",
+        "type" : "select",
+        "via" : "cmd_a"
+      },
+      {
+        "text" : "Notes: Kolabtree",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "collab tree",
+    "result" : "Notes: Kolabtree"
+  },
+  {
+    "base" : "Notes: collab tree, ok",
+    "events" : [
+      {
+        "text" : "Notes: collab tree, ok",
+        "type" : "select",
+        "via" : "cmd_a"
+      },
+      {
+        "text" : "Notes: Kolabtree, ok",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "collab tree",
+    "result" : "Notes: Kolabtree, ok"
+  },
+  {
+    "events" : [
+      {
+        "range" : [
+          20,
+          25
+        ],
+        "text" : "ollab",
+        "type" : "select",
+        "via" : "mouse"
+      },
+      {
+        "text" : "olab",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab",
+      "wanted" : "colab"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my colab tree tab"
+  },
+  {
+    "events" : [
+      {
+        "range" : [
+          19,
+          28
+        ],
+        "text" : "collab tr",
+        "type" : "select",
+        "via" : "mouse"
+      },
+      {
+        "text" : "Kolabtr",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my Kolabtree tab"
+  },
+  {
+    "base" : "my collab tree",
+    "events" : [
+      {
+        "range" : [
+          3,
+          14
+        ],
+        "text" : "collab tree",
+        "type" : "select",
+        "via" : "mouse"
+      },
+      {
+        "text" : "Kolabtree",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "my collab",
+    "result" : "my Kolabtree"
+  },
+  {
+    "base" : "collab tree tab",
+    "events" : [
+      {
+        "range" : [
+          -7,
+          4
+        ],
+        "text" : "collab tree",
+        "type" : "select",
+        "via" : "mouse"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "Kolabtree",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "tree tab",
+    "result" : "Kolabtree tab"
+  },
+  {
+    "events" : [
+      {
+        "range" : [
+          -12,
+          -7
+        ],
+        "text" : "Hello",
+        "type" : "select",
+        "via" : "mouse"
+      },
+      {
+        "text" : "Hi",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "select-outside",
+    "kind" : "replay",
+    "pasted" : "collab tree",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "range" : [
+          -6,
+          0
+        ],
+        "text" : "Hello ",
+        "type" : "select",
+        "via" : "mouse"
+      },
+      {
+        "text" : "Hi ",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "select-outside",
+    "kind" : "replay",
+    "pasted" : "collab tree",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "text" : "unrelated",
+        "type" : "select",
+        "via" : "mouse"
+      },
+      {
+        "text" : "other",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "select-outside",
+    "kind" : "replay",
+    "pasted" : "collab tree",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "range" : [
+          -15,
+          0
+        ],
+        "text" : "Hello my collab",
+        "type" : "select",
+        "via" : "mouse"
+      },
+      {
+        "text" : "Hi",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "select-outside",
+    "kind" : "replay",
+    "pasted" : "tree tab",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "range" : [
+          19,
+          30
+        ],
+        "text" : "collab tree",
+        "type" : "select",
+        "via" : "mouse"
+      },
+      {
+        "text" : "Kolabtree",
+        "type" : "text"
+      },
+      {
+        "type" : "undo"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "undo",
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "range" : [
+          19,
+          30
+        ],
+        "text" : "collab tree",
+        "type" : "select",
+        "via" : "mouse"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "text" : "the ",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my the collab tree tab"
+  },
+  {
+    "events" : [
+      {
+        "range" : [
+          19,
+          30
+        ],
+        "text" : "collab tree",
+        "type" : "select",
+        "via" : "mouse"
+      },
+      {
+        "move" : "right",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "text" : "s",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my collab trees tab"
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "text" : "x",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "tree",
+      "wanted" : "treex"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my collab treex tab"
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "word_left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "word_left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "text" : "Kolabtree ",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my Kolabtree tab"
+  },
+  {
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "word_left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "word_left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "Kolabtree ",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my Kolabtree tab"
+  },
+  {
+    "events" : [
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "right",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "right",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "right",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "right",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "right",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "right",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "right",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "right",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "right",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "right",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "right",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "text" : "Kolabtree",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my Kolabtree tab"
+  },
+  {
+    "events" : [
+      {
+        "range" : [
+          0,
+          11
+        ],
+        "text" : "collab tree",
+        "type" : "select",
+        "via" : "shift_lineStart"
+      },
+      {
+        "text" : "Kolabtree",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "collab tree",
+    "result" : "Kolabtree"
+  },
+  {
+    "base" : "say collab tree",
+    "events" : [
+      {
+        "range" : [
+          -4,
+          11
+        ],
+        "text" : "say collab tree",
+        "type" : "select",
+        "via" : "shift_lineStart"
+      },
+      {
+        "type" : "backspace"
+      },
+      {
+        "text" : "say Kolabtree",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "collab tree",
+    "result" : "say Kolabtree"
+  },
+  {
+    "base" : "my collab tree",
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "range" : [
+          0,
+          14
+        ],
+        "text" : "my collab tree",
+        "type" : "select",
+        "via" : "shift_lineEnd"
+      },
+      {
+        "text" : "my Kolabtree",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "my collab",
+    "result" : "my Kolabtree"
+  },
+  {
+    "base" : "collab tree",
+    "events" : [
+      {
+        "move" : "word_left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "move" : "right",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "right",
+        "select" : true,
+        "type" : "move"
+      },
+      {
+        "move" : "left",
+        "select" : false,
+        "type" : "move"
+      },
+      {
+        "range" : [
+          -7,
+          4
+        ],
+        "text" : "collab tree",
+        "type" : "select",
+        "via" : "shift_wordLeft"
+      },
+      {
+        "text" : "Kolabtree",
+        "type" : "text"
+      }
+    ],
+    "expected" : {
+      "heard" : "collab tree",
+      "wanted" : "Kolabtree"
+    },
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "tree",
+    "result" : "Kolabtree"
+  },
+  {
+    "events" : [
+      {
+        "range" : [
+          34,
+          34
+        ],
+        "text" : "",
+        "type" : "select",
+        "via" : "mouse"
+      },
+      {
+        "text" : "!",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my collab tree tab!"
+  },
+  {
+    "events" : [
+      {
+        "range" : [
+          19,
+          19
+        ],
+        "text" : "",
+        "type" : "select",
+        "via" : "mouse"
+      },
+      {
+        "text" : "my ",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : "take control of my my collab tree tab"
+  },
+  {
+    "events" : [
+      {
+        "text" : "",
+        "type" : "select",
+        "via" : "mouse"
+      },
+      {
+        "text" : "x",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "select-unknown",
+    "kind" : "replay",
+    "pasted" : "take control of my collab tree tab",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "text" : "the",
+        "type" : "select",
+        "via" : "double_click"
+      },
+      {
+        "text" : "a",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : null,
+    "kind" : "replay",
+    "pasted" : "the cat and the dog",
+    "result" : "the cat and a dog"
   }
 ]
