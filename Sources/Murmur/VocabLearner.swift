@@ -366,7 +366,7 @@ final class VocabLearner {
     private var axReadable = false
     private var tiers: Set<String> = ["ax", "replay", "ocr"]
     private var axRestore: (app: AXUIElement, manual: Bool, enhanced: Bool)?
-    private var focusCheckInFlight = false
+    private var axInFlight = Set<String>()
     private var mouseSeq = 0
     private var ocrReady = false
     private var ocrRuns = 0
@@ -401,14 +401,20 @@ final class VocabLearner {
     private static let axQueue = DispatchQueue(label: "murmur.vocab.ax", qos: .userInitiated)
 
     /// Focused text element, resolved off the main thread (the web-area walk is deadline-bounded); `done` runs on main.
-    private func resolveFocusedText(pid: pid_t, _ done: @escaping (AXUIElement?) -> Void) {
+    /// At most one job per `path` is in flight (a hung target app would otherwise pile up 0.4 s jobs on the serial queue);
+    /// returns false, without calling `done`, when that path is already busy.
+    @discardableResult
+    private func resolveFocusedText(path: String, pid: pid_t, _ done: @escaping (AXUIElement?) -> Void) -> Bool {
+        if axInFlight.contains(path) { return false }
+        axInFlight.insert(path)
         Self.axQueue.async { [self] in
             var out: AXUIElement?
             if let el = focusedElement(pid: pid) {
                 out = (AXRead.descendFocused(RealAX(el)) as? RealAX)?.el ?? el
             }
-            DispatchQueue.main.async { done(out) }
+            DispatchQueue.main.async { self.axInFlight.remove(path); done(out) }
         }
+        return true
     }
 
     private func isSecure(_ el: AXUIElement) -> Bool { AXRead.isSecure(RealAX(el)) }
@@ -534,10 +540,11 @@ final class VocabLearner {
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { stop(); done(true); return }
         guard tiers.contains("ax") else { noAX(text); done(true); return }
         let gen = generation
-        resolveFocusedText(pid: pid) { [weak self] el in
+        let queued = resolveFocusedText(path: "begin", pid: pid) { [weak self] el in
             guard let self, gen == self.generation else { done(true); return }
             done(self.beginWith(el, text, pid: pid, final: final))
         }
+        if !queued { if final { noAX(text); done(true) } else { done(false) } }
     }
 
     private func beginWith(_ focused: AXUIElement?, _ text: String, pid: pid_t, final: Bool) -> Bool {
@@ -579,7 +586,7 @@ final class VocabLearner {
         DebugLog.log("learn: ax unreadable, replay-only")
         guard tiers.contains("ocr"), ScreenOCR.granted else { return }
         let gen = generation
-        resolveFocusedText(pid: pid) { [weak self] el in
+        resolveFocusedText(path: "baseline", pid: pid) { [weak self] el in
             guard let self, gen == self.generation, let rect = self.captureRect(el: el) else { return }
             self.baselineOCR(rect: rect, text: text, gen: gen)
         }
@@ -656,12 +663,10 @@ final class VocabLearner {
             || NSWorkspace.shared.frontmostApplication?.processIdentifier != pid {
             stop(evaluate: true); return
         }
-        if let el = element, !focusCheckInFlight {
-            focusCheckInFlight = true
+        if let el = element {
             let gen = generation
-            resolveFocusedText(pid: pid) { [weak self] cur in
+            resolveFocusedText(path: "poll", pid: pid) { [weak self] cur in
                 guard let self else { return }
-                self.focusCheckInFlight = false
                 guard gen == self.generation, self.watching else { return }
                 if let c = cur, self.isSecure(c) { self.stop(); return }
                 // The focused element can flap while a terminal redraws: tolerate a short mismatch.
@@ -728,11 +733,11 @@ final class VocabLearner {
 
     /// Screen-text tier: only when AX had nothing readable and replay produced nothing.
     private func runOCR(gen: Int, text: String, dict: [DictEntry], rej: Set<String>) {
-        ocrRuns += 1
-        resolveFocusedText(pid: pid) { [weak self] el in
+        let queued = resolveFocusedText(path: "ocr", pid: pid) { [weak self] el in
             guard let self, gen == self.generation, let rect = self.captureRect(el: el) else { return }
             self.runOCR(rect: rect, gen: gen, text: text, dict: dict, rej: rej)
         }
+        if queued { ocrRuns += 1 }
     }
 
     private func runOCR(rect: CGRect, gen: Int, text: String, dict: [DictEntry], rej: Set<String>) {
