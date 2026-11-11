@@ -17,10 +17,14 @@ Get-ChildItem $Target -Filter *.dll -File | Where-Object { $_.Name -match 'sherp
 # llama.cpp: official Windows CPU build from the latest release.
 $headers = @{ 'User-Agent' = 'murmur-ci' }
 if ($env:GITHUB_TOKEN) { $headers['Authorization'] = "Bearer $env:GITHUB_TOKEN" }
-$rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest' -Headers $headers
-$asset = $rel.assets | Where-Object { $_.name -match 'bin-win-cpu-x64\.zip$' } | Select-Object -First 1
-if (-not $asset) { $asset = $rel.assets | Where-Object { $_.name -match 'bin-win-avx2-x64\.zip$' } | Select-Object -First 1 }
-if (-not $asset) { throw "No Windows CPU x64 asset in llama.cpp release $($rel.tag_name)" }
+$rels = Invoke-RestMethod -Uri 'https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=10' -Headers $headers
+$rel = $null; $asset = $null
+foreach ($r in $rels) {
+    $a = $r.assets | Where-Object { $_.name -match 'bin-win-cpu-x64\.zip$' } | Select-Object -First 1
+    if (-not $a) { $a = $r.assets | Where-Object { $_.name -match 'bin-win-avx2-x64\.zip$' } | Select-Object -First 1 }
+    if ($a) { $rel = $r; $asset = $a; break }
+}
+if (-not $asset) { throw 'No Windows CPU x64 asset in the recent llama.cpp releases' }
 Write-Host "llama.cpp $($rel.tag_name): $($asset.name)"
 $lz = Join-Path $Out 'llama.zip'
 Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $lz -UseBasicParsing

@@ -108,6 +108,16 @@ jobs:
       - name: UI end-to-end (Notepad, push-to-talk, UI Automation)
         shell: pwsh
         run: ./windows/tests/e2e.ps1 -Murmur "$env:LOCALAPPDATA\Murmur\murmur.exe" -Wav "$env:RUNNER_TEMP\speech.wav" -ModelsDir "$env:LOCALAPPDATA\Murmur\models"
+      - name: LLM cleanup through llama-server.exe (murmur.exe --llm-selftest)
+        shell: pwsh
+        run: |
+          $o = "$env:RUNNER_TEMP\llm.txt"
+          $p = Start-Process -FilePath "$env:LOCALAPPDATA\Murmur\murmur.exe" -ArgumentList '--llm-selftest' -Wait -PassThru -NoNewWindow -RedirectStandardOutput $o -RedirectStandardError "$env:RUNNER_TEMP\llm.err"
+          Get-Content "$env:RUNNER_TEMP\llm.err"
+          $t = (Get-Content -Raw $o).Trim()
+          Write-Host "cleaned: '$t'"
+          if ($p.ExitCode -ne 0) { throw "llm selftest exit $($p.ExitCode)" }
+          if ($t -notmatch '(?i)send me the file by friday') { throw "unexpected cleanup output: $t" }
       - name: upload logs
         if: always()
         uses: actions/upload-artifact@v4
