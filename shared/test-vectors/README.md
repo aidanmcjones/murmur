@@ -21,7 +21,7 @@ Verify with `Murmur --check-test-vectors shared/test-vectors`. Do not hand-edit.
 `select` semantics (see `ReplayModel.select`):
 - `range` is in UTF-16 code units relative to the start of the original paste in the field (negative = before it); it is only present when the field's AX value was readable. `via` (`mouse`, `double_click`, `triple_click`, `cmd_a`, `shift_lineStart`, ...) is informational.
 - A range inside the known text selects it (if `text` disagrees, fall back to locating `text`). A range that crosses the paste's start/end takes the neighbouring characters from `text` and adds them to the model; the case then carries `base` (paste plus those characters) and `expected` is the candidate for `base -> result`, kept only when the heard words overlap the paste itself.
-- Without a usable range: the occurrence of `text` nearest the current caret/selection; else, if `text` contains the whole known text once (Cmd+A in a larger field), both sides are added; else the model freezes `select-outside`.
+- Without a usable range: `text` must occur exactly once in the known text and be at least 4 characters (else freeze `select-ambiguous` / `select-short`, since it may have been selected elsewhere in the field); if it does not occur, if `text` contains the whole known text once (Cmd+A in a larger field), both sides are added; else the model freezes `select-outside`.
 - A selection wholly outside the known text (including one just touching its edge) freezes `select-outside`; empty `text` with no range freezes `select-unknown`.
 
 Older consumers that ignore `base` and `select` still read every pre-existing case unchanged.

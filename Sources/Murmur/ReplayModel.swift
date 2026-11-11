@@ -233,8 +233,10 @@ struct ReplayModel {
         if lo != hi, anchor == hi { cursor = lo } else { anchor = lo; cursor = hi }
     }
 
+    static let minTextOnlySelection = 4
+
     /// Sets the selection reported by AX. Prefers the relative range; falls back to locating the selected text
-    /// (the occurrence nearest the caret). A selection wholly outside the known text freezes the model.
+    /// (only a unique occurrence of >= 4 characters). A selection wholly outside the known text freezes the model.
     private mutating func select(_ s: Selection) {
         if let a = s.start, let b = s.end, a <= b {
             let u0 = a - origin, u1 = b - origin, total = String(chars).utf16.count
@@ -258,12 +260,12 @@ struct ReplayModel {
         let t = Array(text)
         let hits = occurrences(of: t, in: chars)
         if !hits.isEmpty {
-            let here = sel
-            func dist(_ i: Int) -> Int { max(0, i - here.upperBound, here.lowerBound - (i + t.count)) }
-            let best = hits.map(dist).min()!
-            let at = hits.filter { dist($0) == best }
-            // Equally near occurrences hold the same text, so either gives the same heard/wanted.
-            setSelection(at[0], at[0] + t.count)
+            // Without a range, a short or repeated text may have been selected elsewhere in the field ("the"):
+            // only a unique occurrence of >= 4 characters is trusted, anything else is uncertain.
+            guard hits.count == 1, t.count >= Self.minTextOnlySelection else {
+                freeze(hits.count > 1 ? "select-ambiguous" : "select-short"); return
+            }
+            setSelection(hits[0], hits[0] + t.count)
             return
         }
         // The selection covers the whole paste (e.g. Cmd+A in a field holding more text).
@@ -552,7 +554,16 @@ struct ReplayModel {
         run("click-caret", p, [sel("", [15, 15]), .text(" my")], result: "take control of my my collab tree tab",
             cand: VocabDiff.describe(VocabDiff.candidate(pasted: p, edited: "take control of my my collab tree tab")))
         run("click-no-info", p, [sel("", nil), .text("x")], result: nil, cand: "none", frozen: "select-unknown")
-        run("repeated-word-nearest", "the cat and the dog", [left, left, left, left, sel("the", nil, "double_click"), .text("a")],
+        // Text-only fallback (no AX range): only a unique occurrence of >= 4 characters; else uncertain.
+        run("text-only-repeated-freezes", "the cat and the dog", [left, left, left, left, sel("the", nil, "double_click"), .text("a")],
+            result: nil, cand: "none", frozen: "select-ambiguous")
+        run("text-only-repeated-long-freezes", "big tree and small tree", [sel("tree", nil, "double_click"), .text("Tree")],
+            result: nil, cand: "none", frozen: "select-ambiguous")
+        run("text-only-short-unique-freezes", "the cat sat", [sel("cat", nil, "double_click"), .text("dog")],
+            result: nil, cand: "none", frozen: "select-short")
+        run("text-only-unique-long-applies", p, [sel("collab", nil, "double_click"), .text("Kolab")],
+            result: "take control of my Kolab tree tab", cand: VocabDiff.describe(VocabDiff.candidate(pasted: p, edited: "take control of my Kolab tree tab")))
+        run("text-only-ranged-repeat-applies", "the cat and the dog", [sel("the", [12, 15], "double_click"), .text("a")],
             result: "the cat and a dog", cand: VocabDiff.describe(VocabDiff.candidate(pasted: "the cat and the dog", edited: "the cat and a dog")))
         run("range-mismatch-uses-text", p, [sel("collab tree", [0, 11]), .text("Kolabtree")], result: fixed, cand: kola)
         run("emoji-utf16-range", "go 😀 collab tree", [sel("collab tree", [6, 17]), .text("Kolabtree")], result: "go 😀 Kolabtree", cand: kola)

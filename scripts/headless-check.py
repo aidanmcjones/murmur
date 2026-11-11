@@ -31,6 +31,24 @@ cases = [
     (["--help"], {2}),
 ]
 bad = 0
+# Instance guard (flock): two simultaneous guarded processes -> exactly one wins; after it exits a new one wins.
+genv = dict(env, MURMUR_SUPPORT_DIR=tmp)
+procs = [subprocess.Popen([exe, "--instance-guard-test", "3"], env=genv, stdout=subprocess.PIPE, text=True) for _ in range(2)]
+outs = []
+for p in procs:
+    try: outs.append((p.communicate(timeout=30)[0].strip(), p.returncode))
+    except subprocess.TimeoutExpired: p.kill(); outs.append(("timeout", None))
+won = sorted(o for o, _ in outs)
+good = won == ["lost", "won"] and sorted(c for _, c in outs) == [0, 10]
+bad += not good
+print(f"{'PASS' if good else 'FAIL'} instance guard: two launches -> {won}")
+try:
+    r = subprocess.run([exe, "--instance-guard-test", "0"], env=genv, capture_output=True, text=True, timeout=30)
+    good = r.stdout.strip() == "won" and r.returncode == 0
+except subprocess.TimeoutExpired:
+    good = False
+bad += not good
+print(f"{'PASS' if good else 'FAIL'} instance guard: relaunch after exit wins")
 for args, ok in cases:
     try:
         p = subprocess.run([exe] + args, env=env, capture_output=True, text=True, timeout=30)
@@ -40,5 +58,5 @@ for args, ok in cases:
     good = code in ok
     bad += not good
     print(f"{'PASS' if good else 'FAIL'} {' '.join(args)[:60]!r} exit={code}" + ("" if good else f" ({note})"))
-print(f"{len(cases) - bad}/{len(cases)} headless flags exit cleanly without an event tap")
+print(f"{len(cases) + 2 - bad}/{len(cases) + 2} headless checks pass (flags exit, no event tap, single instance)")
 sys.exit(1 if bad else 0)

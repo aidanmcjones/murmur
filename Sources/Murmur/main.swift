@@ -31,7 +31,20 @@ func arg(_ flag: String, _ n: Int = 1) -> [String] {
     return Array(args[(i + 1)...(i + n)])
 }
 
-let known: Set<String> = ["--learn-selftest", "--learn-wfparity", "--check-test-vectors", "--dump-test-vectors", "--clean-text",
+/// Single instance: an exclusive non-blocking flock on <support>/instance.lock, held for the process lifetime
+/// (the fd stays open) and released by the kernel when the process dies, so simultaneous launches yield exactly one
+/// winner and a relaunch succeeds as soon as the old instance is gone.
+var instanceLockFD: Int32 = -1
+func acquireInstanceLock() -> Bool {
+    let path = Paths.support.appendingPathComponent("instance.lock").path
+    let fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
+    guard fd >= 0 else { return true }  // cannot lock (unwritable folder): never block the app on it
+    if flock(fd, LOCK_EX | LOCK_NB) != 0 { close(fd); return false }
+    instanceLockFD = fd
+    return true
+}
+
+let known: Set<String> = ["--instance-guard-test", "--learn-selftest", "--learn-wfparity", "--check-test-vectors", "--dump-test-vectors", "--clean-text",
                           "--learn-test", "--asr-boost-eval", "--transcribe"]
 let modifiers: Set<String> = ["--bundle-id", "--before", "--release-budget"]
 let dashed = args.dropFirst().filter { $0.hasPrefix("--") }
@@ -39,6 +52,13 @@ let mode = dashed.first { known.contains($0) }
 
 if let mode {
     switch mode {
+    case "--instance-guard-test":  // test only: the GUI's instance guard, then hold it SECONDS and exit (0 won, 10 lost)
+        let secs = Double(arg(mode)[0]) ?? 0
+        watchdog(secs + 30)
+        guard acquireInstanceLock() else { print("lost"); exit(10) }
+        print("won"); fflush(stdout)
+        Thread.sleep(forTimeInterval: secs)
+        exit(0)
     case "--learn-selftest": watchdog(120); exit(VocabDiff.selfTest())
     case "--learn-wfparity": watchdog(120); exit(VocabDiff.wfParity())
     case "--check-test-vectors": let d = arg(mode)[0]; watchdog(120); exit(TestVectors.check(dir: d))
@@ -77,10 +97,8 @@ if let mode {
         exit(3)
     }
     // Single instance: a second GUI copy would install a second event tap and paste every dictation twice.
-    let me = getpid()
-    if let other = NSRunningApplication.runningApplications(withBundleIdentifier: "com.aidanjones.murmur")
-        .first(where: { $0.processIdentifier != me && $0.activationPolicy == .regular }) {
-        DebugLog.log("startup: another Murmur is running (pid \(other.processIdentifier)), exiting")
+    guard acquireInstanceLock() else {
+        DebugLog.log("startup: another Murmur holds the instance lock, exiting")
         exit(0)
     }
     let app = NSApplication.shared

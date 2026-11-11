@@ -226,6 +226,8 @@ enum TestVectors {
             (p, [sel("", [19, 19], "mouse"), .text("my ")]),
             (p, [sel("", nil, "mouse"), .text("x")]),
             ("the cat and the dog", [sel("the", nil, "double_click"), .text("a")]),
+            ("the cat and the dog", [sel("the", [12, 15], "double_click"), .text("a")]),
+            ("the cat sat", [sel("cat", nil, "double_click"), .text("dog")]),
         ]
     }()
 
