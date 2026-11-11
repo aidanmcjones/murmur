@@ -43,6 +43,25 @@ enum AXRead {
         return n.stringForRange(location: 0, length: count)
     }
 
+    /// AXSelectedTextRange (UTF-16) then AXSelectedText; the text is skipped once `deadline` has passed.
+    static func selection(_ n: AXNode, deadline: Date = Date().addingTimeInterval(walkBudget)) -> (text: String?, range: CFRange?) {
+        var range: CFRange?
+        if let v = n.attr("AXSelectedTextRange") {
+            let obj = v as AnyObject
+            var r = CFRange()
+            if CFGetTypeID(obj) == AXValueGetTypeID(), AXValueGetValue(obj as! AXValue, .cfRange, &r) { range = r }
+        }
+        guard Date() < deadline else { return (nil, range) }
+        var text: String?
+        if let v = n.attr("AXSelectedText") { text = (v as? String) ?? (v as? NSAttributedString)?.string }
+        return (text, range)
+    }
+
+    static func rangeValue(_ location: Int, _ length: Int) -> Any {
+        var r = CFRange(location: location, length: length)
+        return AXValueCreate(.cfRange, &r)! as Any
+    }
+
     // MARK: Self test with fake trees
 
     final class Fake: AXNode {

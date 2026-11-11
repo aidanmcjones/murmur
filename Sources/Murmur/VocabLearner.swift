@@ -242,6 +242,17 @@ enum VocabDiff {
         ("let's meet at 3", "let's meet at 4", nil),
     ]
 
+    /// The AX tier: diff of the field's value against the snapshot taken at paste time (exact region, then fuzzy).
+    static func axCandidate(pasted: String, snapshot snap: String, now v: String, region reg: (Int, Int),
+                            dictionary dict: [DictEntry] = [], rejected rej: Set<String> = []) -> (Candidate?, String) {
+        if reg.0 >= 0,
+           let (o, n) = editedRegion(old: snap, new: v, regionStart: reg.0, regionEnd: reg.1),
+           (n as NSString).length <= (o as NSString).length * 3 + 200,
+           let c = candidate(pasted: o, edited: n, dictionary: dict, rejected: rej) { return (c, "ax-exact") }
+        if v != snap, let c = fuzzyCandidate(pasted: pasted, buffer: v, dictionary: dict, rejected: rej) { return (c, "ax-fuzzy") }
+        return (nil, "")
+    }
+
     static func describe(_ c: Candidate?) -> String { c.map { "\($0.heard) -> \($0.wanted)" } ?? "none" }
 
     static func selfTest() -> Int32 {
@@ -368,6 +379,9 @@ final class VocabLearner {
     private var axRestore: (app: AXUIElement, manual: Bool, enhanced: Bool)?
     private var axInFlight = Set<String>()
     private var mouseSeq = 0
+    /// Latest selection lookup wanted (seq, via, fallback key, freeze kind) and the newest one already sent to AX.
+    private var selectWant: (seq: Int, via: String, fallback: ReplayModel.Event?, failKind: String)?
+    private var selectSent = 0
     private var ocrReady = false
     private var ocrRuns = 0
 
@@ -611,7 +625,7 @@ final class VocabLearner {
         if let r = replay, r.counts.text + r.counts.delete + r.counts.nav + r.counts.mouse + r.counts.other > 0 {
             DebugLog.log("learn: replay \(r.summary)")
         }
-        replay = nil
+        replay = nil; selectWant = nil
         timer?.invalidate(); timer = nil
         if let o = observer {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(o), .defaultMode)
@@ -638,21 +652,76 @@ final class VocabLearner {
         event.keyboardGetUnicodeString(maxStringLength: 8, actualStringLength: &n, unicodeString: &buf)
         let chars = String(utf16CodeUnits: buf, count: min(n, 8))
         guard let e = ReplayModel.event(code: code, flags: flags, chars: chars) else { return }
-        replay?.apply(e)
         dirtyAt = Date()
+        // Cmd+A, shift+Cmd+arrows and shift-moves past the paste: the app knows the selection, ask AX for it.
+        if tiers.contains("ax"), replay?.selectionNeedsLookup(e) == true {
+            replay?.awaitSelection()
+            mouseSeq += 1
+            requestSelection(via: Self.via(e), fallback: e, failKind: "select")
+            return
+        }
+        // A mouse-up the tap missed: look the selection up before replaying queued keys.
+        if replay?.awaiting == true, let w = selectWant, w.seq > selectSent { sendSelectionQuery() }
+        replay?.apply(e)
     }
 
-    func observeMouse() {
+    private static func via(_ e: ReplayModel.Event) -> String {
+        switch e {
+        case .selectAll: return "cmd_a"
+        case .move(let m, _): return "shift_\(m)"
+        default: return "key"
+        }
+    }
+
+    /// Mouse-down: the caret/selection moves somewhere only the app knows. Keys queue until the lookup on mouse-up.
+    /// Right clicks freeze (context-menu edits are invisible to the replay).
+    func observeMouse(right: Bool = false) {
         guard watching, tiers.contains("replay"), replay != nil else { return }
         dirtyAt = Date()
-        guard let el = element, region.0 >= 0 else { replay?.mouseDown(lookup: false); return }
-        replay?.mouseDown(lookup: true)
+        guard !right, tiers.contains("ax") else { replay?.mouseDown(lookup: false); return }
+        replay?.awaitSelection()
         mouseSeq += 1
-        let seq = mouseSeq, gen = generation, rs = region.0
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
-            guard let self, gen == self.generation, seq == self.mouseSeq else { return }
-            if let r = self.selectionRange(el) { self.replay?.resolveCaret(location: r.location - rs, length: r.length) }
-            else { self.replay?.resolveCaret(location: nil, length: 0) }
+        selectWant = (mouseSeq, "mouse", nil, "mouse")
+    }
+
+    /// Mouse-up (drag end, double/triple click): read AXSelectedText / AXSelectedTextRange.
+    func observeMouseUp(clicks: Int) {
+        guard watching, replay?.awaiting == true else { return }
+        dirtyAt = Date()
+        requestSelection(via: clicks >= 3 ? "triple_click" : clicks == 2 ? "double_click" : "mouse", fallback: nil, failKind: "mouse")
+    }
+
+    private func requestSelection(via: String, fallback: ReplayModel.Event?, failKind: String) {
+        selectWant = (mouseSeq, via, fallback, failKind)
+        sendSelectionQuery()
+    }
+
+    /// Off-main AX read on the serial queue: one in flight (a newer request is re-sent when it returns), generation
+    /// guarded, the focused-element walk and both reads bounded by the 150 ms walk budget.
+    private func sendSelectionQuery() {
+        guard let want = selectWant, !axInFlight.contains("select") else { return }
+        axInFlight.insert("select")
+        selectSent = want.seq
+        let gen = generation, watched = element, pid = self.pid, rs = watched != nil ? region.0 : -1
+        Self.axQueue.asyncAfter(deadline: .now() + 0.06) { [self] in
+            let deadline = Date().addingTimeInterval(AXRead.walkBudget)
+            var el = watched
+            if el == nil, let f = focusedElement(pid: pid) { el = (AXRead.descendFocused(RealAX(f), deadline: deadline) as? RealAX)?.el ?? f }
+            var sel: ReplayModel.Selection?
+            if let el, !isSecure(el) {
+                AXUIElementSetMessagingTimeout(el, Float(AXRead.walkBudget))
+                let r = AXRead.selection(RealAX(el), deadline: deadline)
+                AXUIElementSetMessagingTimeout(el, 0.4)
+                sel = .fromAX(text: r.text, location: r.range?.location, length: r.range?.length, regionStart: rs, via: want.via)
+            }
+            DispatchQueue.main.async {
+                self.axInFlight.remove("select")
+                guard gen == self.generation, self.watching else { return }
+                if let w = self.selectWant, w.seq != want.seq { self.sendSelectionQuery(); return }
+                self.selectWant = nil
+                self.replay?.resolve(sel, fallback: want.fallback, failKind: want.failKind)
+                self.dirtyAt = Date()
+            }
         }
     }
 
@@ -693,7 +762,8 @@ final class VocabLearner {
     private func evaluateNow(final: Bool = false) {
         var axNow: String?
         if let el = element, let v = value(el), (v as NSString).length <= Self.maxChars { axNow = v }
-        let replayText = replay?.result
+        let rm = replay
+        let replayText = rm?.result
         let tryOCR = !final && !axReadable && ocrReady && ocrRuns < 6 && tiers.contains("ocr")
         guard axNow != nil || replayText != nil || tryOCR else { return }
         let gen = generation
@@ -702,20 +772,9 @@ final class VocabLearner {
         Self.evalQueue.async { [weak self] in
             var found: VocabDiff.Candidate?
             var tier = ""
-            if let v = axNow {
-                if reg.0 >= 0,
-                   let (o, n) = VocabDiff.editedRegion(old: snap, new: v, regionStart: reg.0, regionEnd: reg.1),
-                   (n as NSString).length <= (o as NSString).length * 3 + 200 {
-                    found = VocabDiff.candidate(pasted: o, edited: n, dictionary: dict, rejected: rej)
-                    if found != nil { tier = "ax-exact" }
-                }
-                if found == nil, v != snap {
-                    found = VocabDiff.fuzzyCandidate(pasted: text, buffer: v, dictionary: dict, rejected: rej)
-                    if found != nil { tier = "ax-fuzzy" }
-                }
-            }
-            if found == nil, let r = replayText {
-                found = VocabDiff.candidate(pasted: text, edited: r, dictionary: dict, rejected: rej)
+            if let v = axNow { (found, tier) = VocabDiff.axCandidate(pasted: text, snapshot: snap, now: v, region: reg, dictionary: dict, rejected: rej) }
+            if found == nil, replayText != nil {
+                found = rm?.candidate(dictionary: dict, rejected: rej)
                 if found != nil { tier = "replay" }
             }
             DispatchQueue.main.async {
