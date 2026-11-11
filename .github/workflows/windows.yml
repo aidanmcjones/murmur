@@ -1,0 +1,160 @@
+name: windows
+
+on:
+  push:
+    branches: [main]
+    tags: ['win-v*']
+    paths: ['windows/**', 'scripts/setup.ps1', '.github/workflows/windows.yml', 'Sources/Murmur/Resources/**', 'shared/**']
+  pull_request:
+    paths: ['windows/**', 'scripts/setup.ps1', '.github/workflows/windows.yml', 'Sources/Murmur/Resources/**', 'shared/**']
+  workflow_dispatch:
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+  MODELS_KEY: murmur-win-models-v1
+
+jobs:
+  core:
+    name: core tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows
+      - name: cargo test murmur-core (unit tests + parity with shared/test-vectors)
+        working-directory: windows
+        run: cargo test -p murmur-core
+
+  build:
+    name: build murmur.exe + package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows
+      - name: cargo build --release
+        working-directory: windows
+        run: cargo build --release -p murmur-win
+      - name: smoke test
+        working-directory: windows
+        shell: pwsh
+        run: |
+          $o = Start-Process -FilePath target\release\murmur.exe -ArgumentList '--version' -Wait -PassThru -NoNewWindow -RedirectStandardOutput v.txt
+          Get-Content v.txt
+          if ($o.ExitCode -ne 0) { throw "murmur --version failed" }
+      - name: package zip
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./windows/package.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: murmur-win-x64
+          path: |
+            windows/dist/murmur-win-x64.zip
+            windows/dist/murmur-win-x64.zip.sha256
+
+  test:
+    name: setup.ps1 + headless transcribe + UI end-to-end
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: murmur-win-x64
+          path: dist
+      - name: restore model cache
+        id: models
+        uses: actions/cache/restore@v4
+        with:
+          path: ~\AppData\Local\Murmur\models
+          key: ${{ env.MODELS_KEY }}
+      - name: scripts/setup.ps1 against the zip built in this workflow
+        shell: pwsh
+        run: ./scripts/setup.ps1 -NoLaunch -ZipPath "$PWD\dist\murmur-win-x64.zip"
+      - name: save model cache
+        if: always() && steps.models.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~\AppData\Local\Murmur\models
+          key: ${{ env.MODELS_KEY }}
+      - name: setup.ps1 is idempotent (second run downloads nothing)
+        shell: pwsh
+        run: |
+          $t = Measure-Command { ./scripts/setup.ps1 -NoLaunch -ZipPath "$PWD\dist\murmur-win-x64.zip" -Startup }
+          Write-Host "second run took $($t.TotalSeconds) s"
+          if (-not (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run').Murmur) { throw 'startup entry missing' }
+          Get-ChildItem "$env:LOCALAPPDATA\Murmur" | Format-Table Name, Length
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Murmur.lnk")) { throw 'shortcut missing' }
+      - name: synthesize speech (System.Speech)
+        shell: pwsh
+        run: ./windows/tests/make-wav.ps1 -Out "$env:RUNNER_TEMP\speech.wav"
+      - name: headless transcription (murmur.exe --transcribe)
+        shell: pwsh
+        env:
+          MURMUR_APPDATA: ${{ runner.temp }}\appdata-headless
+        run: ./windows/tests/transcribe.ps1 -Murmur "$env:LOCALAPPDATA\Murmur\murmur.exe" -Wav "$env:RUNNER_TEMP\speech.wav"
+      - name: UI end-to-end (Notepad, push-to-talk, UI Automation)
+        shell: pwsh
+        run: ./windows/tests/e2e.ps1 -Murmur "$env:LOCALAPPDATA\Murmur\murmur.exe" -Wav "$env:RUNNER_TEMP\speech.wav" -ModelsDir "$env:LOCALAPPDATA\Murmur\models"
+      - name: upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: |
+            e2e-appdata
+            ${{ runner.temp }}\appdata-headless
+          if-no-files-found: ignore
+
+  release:
+    name: GitHub release
+    if: startsWith(github.ref, 'refs/tags/win-v')
+    needs: [core, build, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: murmur-win-x64
+          path: dist
+      - name: create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/murmur-win-x64.zip dist/murmur-win-x64.zip.sha256 \
+            --repo "${{ github.repository }}" --title "Murmur for Windows ${{ github.ref_name }}" \
+            --notes "Windows build of Murmur. Install: run scripts/setup.ps1 (see README). Built and tested by the windows workflow." \
+            || gh release upload "${{ github.ref_name }}" dist/murmur-win-x64.zip dist/murmur-win-x64.zip.sha256 --clobber --repo "${{ github.repository }}"
+
+  verify-release:
+    name: setup.ps1 against the published release
+    if: startsWith(github.ref, 'refs/tags/win-v')
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~\AppData\Local\Murmur\models
+          key: ${{ env.MODELS_KEY }}
+      - name: install from the GitHub release
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          ./scripts/setup.ps1 -NoLaunch -Tag "${{ github.ref_name }}"
+          & "$env:LOCALAPPDATA\Murmur\murmur.exe" --version
+          if (-not (Test-Path "$env:LOCALAPPDATA\Murmur\llama-server.exe")) { throw 'llama-server.exe missing' }
