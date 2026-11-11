@@ -315,6 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         add(menu, "Add word to vocabulary…", #selector(addVocabularyWord))
         add(menu, "Edit vocabulary", #selector(editVocabulary))
         add(menu, "Learn vocabulary from my edits", #selector(toggleLearn)).state = Settings.learnVocab ? .on : .off
+        add(menu, "Enable screen-text learning…", #selector(enableScreenText)).state = ScreenOCR.granted ? .on : .off
         add(menu, "Import from Wispr Flow", #selector(importWispr))
 
         let recent = NSMenuItem(title: "Recent", action: nil, keyEquivalent: "")
@@ -367,6 +368,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Settings.learnVocab.toggle()
         if !Settings.learnVocab { VocabLearner.shared.stop() }
     }
+    @objc private func enableScreenText() { ScreenOCR.requestFromMenu() }
     @objc private func toggleFn() {
         Settings.useFn.toggle(); hotkey.reset()
     }

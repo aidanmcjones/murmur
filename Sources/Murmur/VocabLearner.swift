@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Carbon.HIToolbox
 
 /// Pure diff logic: finds a "heard -> wanted" vocabulary correction between pasted and edited text.
 enum VocabDiff {
@@ -326,12 +327,14 @@ enum VocabDiff {
         // Hand-written single-word replacement must not match fuzzily.
         let hand = Post.applyDictionary("say Colab tree", [DictEntry(phrase: "collab tree", replacement: "Kolabtree")])
         if hand == "say Colab tree" { print("PASS fuzzy-hand-written-exact-only") } else { fails += 1; print("FAIL fuzzy-hand-written: \(hand)") }
+        fails += Int(ReplayModel.selfTest())
         print(fails == 0 ? "ALL PASS" : "\(fails) FAILED")
         return fails == 0 ? 0 : 1
     }
 }
 
 /// Watches the focused text element after a paste and suggests vocabulary from the user's correction.
+/// Tiers: AX value diff (exact / fuzzy anchoring) -> key-event replay -> screen OCR.
 final class VocabLearner {
     static let shared = VocabLearner()
 
@@ -348,17 +351,33 @@ final class VocabLearner {
     private var startedAt = Date()
     private var timer: Timer?
     private var generation = 0
+    private var replay: ReplayModel?
+    private var axReadable = false
+    private var tiers: Set<String> = ["ax", "replay", "ocr"]
+    private var enhancedApp: AXUIElement?
+    private var mouseSeq = 0
+    private var ocrReady = false
+    private var ocrRuns = 0
 
     static let maxChars = 50_000
     static let watchSeconds: TimeInterval = 45
     static let debounce: TimeInterval = 2.5
     static let focusGrace: TimeInterval = 2
+    static let browserPrefixes = ["com.google.Chrome", "com.apple.Safari", "org.chromium.Chromium", "com.microsoft.edgemac",
+                                  "com.brave.Browser", "company.thebrowser.Browser", "com.vivaldi.Vivaldi", "com.operasoftware.Opera"]
+
+    private var watching: Bool { timer != nil }
 
     // MARK: AX helpers
 
-    private func focusedElement(pid: pid_t) -> AXUIElement? {
+    private func appElement(_ pid: pid_t) -> AXUIElement {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.4)
+        return app
+    }
+
+    private func focusedElement(pid: pid_t) -> AXUIElement? {
+        let app = appElement(pid)
         var f: CFTypeRef?
         guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &f) == .success,
               let r = f, CFGetTypeID(r) == AXUIElementGetTypeID() else { return nil }
@@ -367,116 +386,267 @@ final class VocabLearner {
         return el
     }
 
-    private func isSecure(_ el: AXUIElement) -> Bool {
-        for attr in [kAXRoleAttribute, kAXSubroleAttribute] {
-            var r: CFTypeRef?
-            if AXUIElementCopyAttributeValue(el, attr as CFString, &r) == .success,
-               (r as? String) == "AXSecureTextField" { return true }
+    private func stringAttr(_ el: AXUIElement, _ attr: String) -> String? {
+        var r: CFTypeRef?
+        return AXUIElementCopyAttributeValue(el, attr as CFString, &r) == .success ? r as? String : nil
+    }
+
+    private static let textRoles: Set<String> = ["AXTextArea", "AXTextField", "AXComboBox", "AXSearchField"]
+
+    /// Web areas / groups report focus on a container: walk down to the focused text area / field / contenteditable.
+    private func descendFocused(_ el: AXUIElement, depth: Int = 0) -> AXUIElement {
+        if let role = stringAttr(el, kAXRoleAttribute), Self.textRoles.contains(role) { return el }
+        guard depth < 6 else { return el }
+        var kids: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(el, kAXChildrenAttribute as CFString, &kids) == .success,
+              let arr = kids as? [AXUIElement] else { return el }
+        for k in arr.prefix(100) {
+            var f: CFTypeRef?
+            if AXUIElementCopyAttributeValue(k, kAXFocusedAttribute as CFString, &f) == .success, (f as? Bool) == true {
+                AXUIElementSetMessagingTimeout(k, 0.4)
+                return descendFocused(k, depth: depth + 1)
+            }
         }
+        return el
+    }
+
+    private func focusedTextElement(pid: pid_t) -> AXUIElement? {
+        focusedElement(pid: pid).map { descendFocused($0) }
+    }
+
+    private func isSecure(_ el: AXUIElement) -> Bool {
+        for attr in [kAXRoleAttribute, kAXSubroleAttribute] where stringAttr(el, attr) == "AXSecureTextField" { return true }
         return false
     }
 
+    /// AXValue, falling back to AXStringForRange over AXNumberOfCharacters.
     private func value(_ el: AXUIElement) -> String? {
         var v: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(el, kAXValueAttribute as CFString, &v) == .success else { return nil }
-        return v as? String
+        if AXUIElementCopyAttributeValue(el, kAXValueAttribute as CFString, &v) == .success {
+            if let s = v as? String { return s }
+            if let a = v as? NSAttributedString { return a.string }
+        }
+        var n: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(el, kAXNumberOfCharactersAttribute as CFString, &n) == .success,
+              let count = (n as? NSNumber)?.intValue, count > 0, count <= Self.maxChars else { return nil }
+        var range = CFRange(location: 0, length: count)
+        guard let axr = AXValueCreate(.cfRange, &range) else { return nil }
+        var out: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(el, kAXStringForRangeParameterizedAttribute as CFString, axr, &out) == .success
+        else { return nil }
+        return out as? String
     }
 
-    private func selectionLocation(_ el: AXUIElement) -> Int? {
+    private func selectionRange(_ el: AXUIElement) -> CFRange? {
         var r: CFTypeRef?
         guard AXUIElementCopyAttributeValue(el, kAXSelectedTextRangeAttribute as CFString, &r) == .success,
               let ref = r, CFGetTypeID(ref) == AXValueGetTypeID() else { return nil }
         var range = CFRange()
-        return AXValueGetValue(ref as! AXValue, .cfRange, &range) ? range.location : nil
+        return AXValueGetValue(ref as! AXValue, .cfRange, &range) ? range : nil
+    }
+
+    private func selectionLocation(_ el: AXUIElement) -> Int? { selectionRange(el)?.location }
+
+    /// Electron/Chromium expose their tree only on request; browsers also get AXEnhancedUserInterface while watching.
+    private func prepareAX(pid: pid_t, bundleId: String) {
+        let app = appElement(pid)
+        AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        guard Self.browserPrefixes.contains(where: { bundleId.hasPrefix($0) }) else { return }
+        var cur: CFTypeRef?
+        let prev = AXUIElementCopyAttributeValue(app, "AXEnhancedUserInterface" as CFString, &cur) == .success ? ((cur as? Bool) ?? false) : false
+        if !prev, AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue) == .success {
+            enhancedApp = app
+        }
+    }
+
+    private func frame(_ el: AXUIElement) -> CGRect? {
+        var r: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(el, "AXFrame" as CFString, &r) == .success, let ref = r,
+              CFGetTypeID(ref) == AXValueGetTypeID() else { return nil }
+        var rect = CGRect.zero
+        return AXValueGetValue(ref as! AXValue, .cgRect, &rect) ? rect : nil
+    }
+
+    /// Region to OCR: the focused element's frame, else the caret's neighbourhood, else the focused window.
+    private func captureRect() -> CGRect? {
+        let app = appElement(pid)
+        let el = focusedTextElement(pid: pid)
+        if let el, let f = frame(el), f.width > 20, f.height > 10, f.width * f.height <= 1_500_000 { return f.insetBy(dx: -10, dy: -10) }
+        if let el, let sel = selectionRange(el) {
+            var range = CFRange(location: max(0, sel.location - 1), length: 1)
+            var out: CFTypeRef?
+            if let axr = AXValueCreate(.cfRange, &range),
+               AXUIElementCopyParameterizedAttributeValue(el, kAXBoundsForRangeParameterizedAttribute as CFString, axr, &out) == .success,
+               let ref = out, CFGetTypeID(ref) == AXValueGetTypeID() {
+                var rect = CGRect.zero
+                if AXValueGetValue(ref as! AXValue, .cgRect, &rect), rect.width > 0 {
+                    return CGRect(x: rect.midX - 400, y: rect.midY - 120, width: 800, height: 240)
+                }
+            }
+        }
+        var w: CFTypeRef?
+        if AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &w) == .success, let wr = w,
+           CFGetTypeID(wr) == AXUIElementGetTypeID(), let f = frame(wr as! AXUIElement) { return f }
+        return nil
     }
 
     // MARK: Lifecycle
 
-    /// Call right after a successful paste (main thread).
-    func pasted(_ text: String, bundleId: String) {
+    /// Call right after a successful paste (main thread). `tiers` is only varied by the debug hook.
+    func pasted(_ text: String, bundleId: String, tiers: Set<String> = ["ax", "replay", "ocr"]) {
         stop()
-        guard Settings.learnVocab, AXIsProcessTrusted(), !text.isEmpty else { return }
+        guard Settings.learnVocab, AXIsProcessTrusted(), !text.isEmpty, !IsSecureEventInputEnabled() else { return }
         generation += 1
         let gen = generation
         let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
         guard pid != 0 else { return }
-        attempt(text, bundleId: bundleId, pid: pid, gen: gen, delays: [0.15, 0.5, 1.0])
+        self.pid = pid; self.bundleId = bundleId; self.tiers = tiers
+        pasted = text; snapshot = ""; lastValue = ""; region = (-1, -1)
+        element = nil; axReadable = false; ocrReady = false; ocrRuns = 0
+        replay = ReplayModel(text)  // records from the moment of the paste, even before AX is readable
+        focusLostSince = nil; dirtyAt = nil; startedAt = Date()
+        if tiers.contains("ax") { prepareAX(pid: pid, bundleId: bundleId) }
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in VocabLearner.shared.poll() }
+        DebugLog.log("learn: watching app=\(bundleId) len=\((text as NSString).length)")
+        attempt(text, bundleId: bundleId, pid: pid, gen: gen, delays: [0.15, 0.5, 1.0, 2.0])
     }
 
     private func attempt(_ text: String, bundleId: String, pid: pid_t, gen: Int, delays: [Double]) {
         guard let d = delays.first else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + d) { [weak self] in
             guard let self, gen == self.generation else { return }
-            if self.begin(text, bundleId: bundleId, pid: pid) { return }
+            let last = delays.count == 1
+            if self.begin(text, bundleId: bundleId, pid: pid, final: last) { return }
             self.attempt(text, bundleId: bundleId, pid: pid, gen: gen, delays: Array(delays.dropFirst()))
         }
     }
 
-    /// Returns true when watching started or the target is permanently unsuitable.
-    private func begin(_ text: String, bundleId: String, pid: pid_t) -> Bool {
-        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
-              let el = focusedElement(pid: pid) else { return true }
-        if isSecure(el) { return true }
-        guard let v = value(el), (v as NSString).length <= Self.maxChars else { return true }
-        let ns = v as NSString
-        let len = (text as NSString).length
-        var start = -1
-        var exact = true
-        if let loc = selectionLocation(el), loc - len >= 0, loc <= ns.length,
-           ns.substring(with: NSRange(location: loc - len, length: len)) == text { start = loc - len }
-        else {
-            let r = ns.range(of: text, options: .backwards)
-            if r.location != NSNotFound { start = r.location }
+    /// Looks for a readable field holding the paste. Returns true when done (found, replay-only, or aborted).
+    private func begin(_ text: String, bundleId: String, pid: pid_t, final: Bool) -> Bool {
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { stop(); return true }
+        guard tiers.contains("ax") else { noAX(text); return true }
+        if let el = focusedTextElement(pid: pid) {
+            if isSecure(el) { stop(); return true }
+            if let v = value(el), (v as NSString).length <= Self.maxChars {
+                let ns = v as NSString
+                let len = (text as NSString).length
+                var start = -1
+                var exact = true
+                if let loc = selectionLocation(el), loc - len >= 0, loc <= ns.length,
+                   ns.substring(with: NSRange(location: loc - len, length: len)) == text { start = loc - len }
+                else {
+                    let r = ns.range(of: text, options: .backwards)
+                    if r.location != NSNotFound { start = r.location }
+                }
+                // Terminals redraw/wrap the buffer, so the paste may only be findable fuzzily (region disabled).
+                if start < 0, VocabDiff.fuzzyContains(pasted: text, buffer: v) { exact = false }
+                else if start < 0 { if final { noAX(text); return true }; return false }
+                element = el; axReadable = true
+                snapshot = v; lastValue = v
+                region = exact ? (start, start + len) : (-1, -1)
+                var obs: AXObserver?
+                if AXObserverCreate(pid, { _, _, _, _ in VocabLearner.shared.markDirty() }, &obs) == .success, let o = obs {
+                    AXObserverAddNotification(o, el, kAXValueChangedNotification as CFString, nil)
+                    CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(o), .defaultMode)
+                    observer = o
+                }
+                DebugLog.log("learn: ax readable exact=\(exact)")
+                return true
+            }
         }
-        // Terminals redraw/wrap the buffer, so the paste may only be findable fuzzily (region disabled).
-        if start < 0, VocabDiff.fuzzyContains(pasted: text, buffer: v) { start = -1; exact = false }
-        else if start < 0 { return false }  // paste may not have landed yet
-        element = el; self.pid = pid; self.bundleId = bundleId
-        pasted = text; snapshot = v; lastValue = v
-        region = exact ? (start, start + len) : (-1, -1)
-        focusLostSince = nil
-        dirtyAt = nil; startedAt = Date()
-        var obs: AXObserver?
-        if AXObserverCreate(pid, { _, _, _, _ in VocabLearner.shared.markDirty() }, &obs) == .success, let o = obs {
-            AXObserverAddNotification(o, el, kAXValueChangedNotification as CFString, nil)
-            CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(o), .defaultMode)
-            observer = o
+        if final { noAX(text); return true }
+        return false
+    }
+
+    /// No readable text: rely on key replay, and prepare the OCR baseline when permitted.
+    private func noAX(_ text: String) {
+        DebugLog.log("learn: ax unreadable, replay-only")
+        guard tiers.contains("ocr"), ScreenOCR.granted, let rect = captureRect() else { return }
+        let gen = generation
+        Task.detached {
+            guard let img = await ScreenOCR.capture(rect), let t = ScreenOCR.recognize(img) else { return }
+            let ok = VocabDiff.fuzzyContains(pasted: text, buffer: t)
+            DispatchQueue.main.async {
+                guard gen == VocabLearner.shared.generation else { return }
+                VocabLearner.shared.ocrReady = ok
+                DebugLog.log("learn: ocr baseline ok=\(ok)")
+            }
         }
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in VocabLearner.shared.poll() }
-        DebugLog.log("learn: watching app=\(bundleId) len=\(len)")
-        return true
     }
 
     /// Ends the current watch (new dictation, focus moved, timeout). Evaluates once if there are pending edits.
     func stop(evaluate: Bool = false) {
         generation += 1
-        if evaluate, element != nil { evaluateNow() }
+        if evaluate, watching { evaluateNow(final: true) }
+        if let r = replay, r.counts.text + r.counts.delete + r.counts.nav + r.counts.mouse + r.counts.other > 0 {
+            DebugLog.log("learn: replay \(r.summary)")
+        }
+        replay = nil
         timer?.invalidate(); timer = nil
         if let o = observer {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(o), .defaultMode)
         }
-        observer = nil; element = nil; dirtyAt = nil
+        if let a = enhancedApp { AXUIElementSetAttributeValue(a, "AXEnhancedUserInterface" as CFString, kCFBooleanFalse) }
+        enhancedApp = nil
+        observer = nil; element = nil; dirtyAt = nil; axReadable = false; ocrReady = false
     }
 
     /// Called per keystroke by the AX observer: cheap, no AX reads (large fields would stutter typing).
-    private func markDirty() { if element != nil { dirtyAt = Date() } }
+    private func markDirty() { if watching { dirtyAt = Date() } }
+
+    // MARK: Key / mouse observation (from the event tap; pass-through, main thread)
+
+    var recording: Bool { watching }
+
+    func observeKey(code: Int, flags: CGEventFlags, event: CGEvent) {
+        guard watching, tiers.contains("replay") else { return }
+        if IsSecureEventInputEnabled() { stop(); return }
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else {
+            replay?.apply(.unsupported); return
+        }
+        var buf = [UniChar](repeating: 0, count: 8)
+        var n = 0
+        event.keyboardGetUnicodeString(maxStringLength: 8, actualStringLength: &n, unicodeString: &buf)
+        let chars = String(utf16CodeUnits: buf, count: min(n, 8))
+        guard let e = ReplayModel.event(code: code, flags: flags, chars: chars) else { return }
+        replay?.apply(e)
+        dirtyAt = Date()
+    }
+
+    func observeMouse() {
+        guard watching, tiers.contains("replay"), replay != nil else { return }
+        dirtyAt = Date()
+        guard let el = element, region.0 >= 0 else { replay?.mouseDown(lookup: false); return }
+        replay?.mouseDown(lookup: true)
+        mouseSeq += 1
+        let seq = mouseSeq, gen = generation, rs = region.0
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+            guard let self, gen == self.generation, seq == self.mouseSeq else { return }
+            if let r = self.selectionRange(el) { self.replay?.resolveCaret(location: r.location - rs, length: r.length) }
+            else { self.replay?.resolveCaret(location: nil, length: 0) }
+        }
+    }
 
     private func poll() {
-        guard let el = element else { return }
+        guard watching else { return }
+        if IsSecureEventInputEnabled() { stop(); return }
         if Date().timeIntervalSince(startedAt) > Self.watchSeconds
             || NSWorkspace.shared.frontmostApplication?.processIdentifier != pid {
             stop(evaluate: true); return
         }
-        // The focused element can flap while a terminal redraws: tolerate a short mismatch.
-        if focusedElement(pid: pid).map({ CFEqual($0, el) }) != true {
-            let since = focusLostSince ?? Date()
-            focusLostSince = since
-            if Date().timeIntervalSince(since) > Self.focusGrace { stop(evaluate: true) }
-            return
+        if let el = element {
+            // The focused element can flap while a terminal redraws: tolerate a short mismatch.
+            let cur = focusedTextElement(pid: pid)
+            if let c = cur, isSecure(c) { stop(); return }
+            if cur.map({ CFEqual($0, el) }) != true {
+                let since = focusLostSince ?? Date()
+                focusLostSince = since
+                if Date().timeIntervalSince(since) > Self.focusGrace { stop(evaluate: true) }
+                return
+            }
+            focusLostSince = nil
+            if let v = value(el), v != lastValue { lastValue = v; dirtyAt = Date() }
         }
-        focusLostSince = nil
-        guard let v = value(el) else { return }
-        if v != lastValue { lastValue = v; dirtyAt = Date() }
         if let d = dirtyAt, Date().timeIntervalSince(d) >= Self.debounce {
             dirtyAt = nil
             evaluateNow()
@@ -487,29 +657,60 @@ final class VocabLearner {
     private static let evalQueue = DispatchQueue(label: "murmur.vocab.eval", qos: .userInitiated)
 
     /// Reads the field on main, runs the heavy diff off-main, then shows the pop-up on main if the watch is still current.
-    private func evaluateNow() {
-        guard let el = element, let v = value(el), (v as NSString).length <= Self.maxChars else { return }
+    private func evaluateNow(final: Bool = false) {
+        var axNow: String?
+        if let el = element, let v = value(el), (v as NSString).length <= Self.maxChars { axNow = v }
+        let replayText = replay?.result
+        let tryOCR = !final && !axReadable && ocrReady && ocrRuns < 6 && tiers.contains("ocr")
+        guard axNow != nil || replayText != nil || tryOCR else { return }
         let gen = generation
         let dict = UserDictionary.load(), rej = Settings.rejectedPairs
         let (snap, text, reg) = (snapshot, pasted, region)
         Self.evalQueue.async { [weak self] in
             var found: VocabDiff.Candidate?
-            var fuzzy = false
-            if reg.0 >= 0,
-               let (o, n) = VocabDiff.editedRegion(old: snap, new: v, regionStart: reg.0, regionEnd: reg.1),
-               (n as NSString).length <= (o as NSString).length * 3 + 200 {
-                found = VocabDiff.candidate(pasted: o, edited: n, dictionary: dict, rejected: rej)
+            var tier = ""
+            if let v = axNow {
+                if reg.0 >= 0,
+                   let (o, n) = VocabDiff.editedRegion(old: snap, new: v, regionStart: reg.0, regionEnd: reg.1),
+                   (n as NSString).length <= (o as NSString).length * 3 + 200 {
+                    found = VocabDiff.candidate(pasted: o, edited: n, dictionary: dict, rejected: rej)
+                    if found != nil { tier = "ax-exact" }
+                }
+                if found == nil, v != snap {
+                    found = VocabDiff.fuzzyCandidate(pasted: text, buffer: v, dictionary: dict, rejected: rej)
+                    if found != nil { tier = "ax-fuzzy" }
+                }
             }
-            if found == nil, v != snap {
-                found = VocabDiff.fuzzyCandidate(pasted: text, buffer: v, dictionary: dict, rejected: rej)
-                fuzzy = found != nil
+            if found == nil, let r = replayText {
+                found = VocabDiff.candidate(pasted: text, edited: r, dictionary: dict, rejected: rej)
+                if found != nil { tier = "replay" }
             }
             DispatchQueue.main.async {
-                guard let self else { return }
-                guard gen == self.generation, let c = found else { return }
-                if fuzzy { DebugLog.log("learn: fuzzy anchor") }
-                self.suggest(c)
-                self.stop()
+                guard let self, gen == self.generation else { return }
+                if let c = found {
+                    DebugLog.log("learn: tier=\(tier)")
+                    self.suggest(c)
+                    self.stop()
+                } else if tryOCR {
+                    self.runOCR(gen: gen, text: text, dict: dict, rej: rej)
+                }
+            }
+        }
+    }
+
+    /// Screen-text tier: only when AX had nothing readable and replay produced nothing.
+    private func runOCR(gen: Int, text: String, dict: [DictEntry], rej: Set<String>) {
+        guard let rect = captureRect() else { return }
+        ocrRuns += 1
+        Task.detached {
+            guard let img = await ScreenOCR.capture(rect), let after = ScreenOCR.recognize(img) else { return }
+            let found = VocabDiff.fuzzyCandidate(pasted: text, buffer: after, dictionary: dict, rejected: rej)
+            DispatchQueue.main.async {
+                let me = VocabLearner.shared
+                guard gen == me.generation, let c = found else { return }
+                DebugLog.log("learn: tier=ocr")
+                me.suggest(c)
+                me.stop()
             }
         }
     }
@@ -551,11 +752,13 @@ final class VocabLearner {
     /// Distributed notifications "MurmurDebugPaste" {text} and "MurmurDebugSuggestion" {action: add|dismiss|never}.
     static func installDebugHooks() {
         guard UserDefaults.standard.bool(forKey: "debugHooks") else { return }
+        DebugLog.log("learn: debug hooks on, screen capture granted=\(ScreenOCR.granted)")
         let c = DistributedNotificationCenter.default()
         c.addObserver(forName: NSNotification.Name("MurmurDebugPaste"), object: nil, queue: .main) { n in
             guard let t = n.userInfo?["text"] as? String else { return }
             DebugLog.log("learn: debug paste len=\(t.count)")
-            shared.pasted(t, bundleId: NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "")
+            let tiers = (n.userInfo?["tiers"] as? String).map { Set($0.split(separator: ",").map(String.init)) } ?? ["ax", "replay", "ocr"]
+            shared.pasted(t, bundleId: NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "", tiers: tiers)
         }
         c.addObserver(forName: NSNotification.Name("MurmurDebugSuggestion"), object: nil, queue: .main) { n in
             switch n.userInfo?["action"] as? String {
