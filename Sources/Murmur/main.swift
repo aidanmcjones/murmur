@@ -6,7 +6,7 @@ let args = CommandLine.arguments
 let usage = """
     usage: Murmur [--learn-selftest | --learn-wfparity | --check-test-vectors DIR | --dump-test-vectors DIR
                    | --clean-text TEXT [--bundle-id ID] | --learn-test PASTED EDITED | --asr-boost-eval DIR
-                   | --transcribe FILE [--bundle-id ID] [--before TEXT]]
+                   | --transcribe FILE [--bundle-id ID] [--before TEXT] [--release-budget]]
     (no arguments: the menu-bar app)
 
     """
@@ -33,7 +33,7 @@ func arg(_ flag: String, _ n: Int = 1) -> [String] {
 
 let known: Set<String> = ["--learn-selftest", "--learn-wfparity", "--check-test-vectors", "--dump-test-vectors", "--clean-text",
                           "--learn-test", "--asr-boost-eval", "--transcribe"]
-let modifiers: Set<String> = ["--bundle-id", "--before"]
+let modifiers: Set<String> = ["--bundle-id", "--before", "--release-budget"]
 let dashed = args.dropFirst().filter { $0.hasPrefix("--") }
 let mode = dashed.first { known.contains($0) }
 
