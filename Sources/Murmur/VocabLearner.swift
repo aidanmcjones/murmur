@@ -148,7 +148,7 @@ enum VocabDiff {
     }
 
     static func fuzzyWindows(pasted: String, buffer: String, deadline: Date = Date().addingTimeInterval(fuzzyBudget))
-        -> [(text: String, matched: Int)] {
+        -> [(text: String, matched: Int, end: Int)] {
         let p = tokenize(cappedPaste(pasted)).map { $0.word.lowercased() }
         var bt = tokenize(String(buffer.suffix(fuzzyTailTokens * 12)))
         if p.isEmpty { return [] }
@@ -168,7 +168,7 @@ enum VocabDiff {
             }
         }
         found.sort { $0.m != $1.m ? $0.m > $1.m : ($0.e != $1.e ? $0.e > $1.e : $0.s > $1.s) }
-        return found.prefix(400).map { (bt[$0.s..<$0.e].map { $0.word }.joined(separator: " "), $0.m) }
+        return found.prefix(400).map { (bt[$0.s..<$0.e].map { $0.word }.joined(separator: " "), $0.m, $0.e) }
     }
 
     /// True when the pasted text appears (nearly) intact in the buffer.
@@ -185,7 +185,8 @@ enum VocabDiff {
         var tried = 0
         let short = pn <= 3
         let wins = fuzzyWindows(pasted: pasted, buffer: buffer, deadline: deadline)
-        if wins.first.map({ $0.matched == pn }) == true { return nil }  // paste still intact: nothing was edited
+        // An intact copy only suppresses when it is at/after the candidate window (nearer the live prompt).
+        let intactEnd = wins.filter { $0.matched == pn }.map { $0.end }.max()
         for w in wins {
             if Date() > deadline { break }
             if short {  // cheap pre-filter: whole-string similarity of the pasted words vs the window
@@ -300,6 +301,10 @@ enum VocabDiff {
         let older = "> an older note mentioning a collar here\n✶ Pondering\n│ > collab │\n"
         let g1 = describe(fuzzyCandidate(pasted: "collab", buffer: older.replacingOccurrences(of: "✶", with: "✻")))
         if g1 == "none" { print("PASS tui-intact-older-line") } else { fails += 1; print("FAIL tui-intact-older-line: \(g1)") }
+        // Older intact "Collab tree" in scrollback, live prompt edited: still suggests.
+        let hist = tui("Collab tree", spinner: "✶").replacingOccurrences(of: "> earlier thing I asked about the repo", with: "> Collab tree")
+        let g2 = describe(fuzzyCandidate(pasted: "Collab tree", buffer: hist.replacingOccurrences(of: "│ > Collab tree", with: "│ > Kolabtree")))
+        if g2 == "Collab tree -> Kolabtree" { print("PASS tui-older-intact-scrollback") } else { fails += 1; print("FAIL tui-older-intact-scrollback: \(g2)") }
         // Performance: 150-token paste in a 12k-token buffer.
         let vocab = ["the", "collab", "tree", "open", "window", "and", "then", "list", "my", "tab", "take", "control", "of"]
         var seed: UInt64 = 42
