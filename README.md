@@ -1,31 +1,59 @@
 # Murmur
 
-Native macOS menu-bar push-to-talk dictation (whisper.cpp + local or Anthropic cleanup).
+Hold a key, talk, let go: clean, punctuated text appears wherever your cursor is. Murmur is a free, open-source push-to-talk dictation app for macOS that runs **entirely on your Mac**. No account, no subscription, and your voice never leaves the computer.
 
-## Setup
-1. `brew install whisper-cpp ollama`; `ollama pull qwen3:4b-instruct-2507-q4_K_M`.
-2. Model at `models/ggml-large-v3-turbo.bin` (or `~/Library/Application Support/Murmur/models/`, or `$MURMUR_MODEL`).
-3. `scripts/build.sh`, then `scripts/install.sh` (copies to `~/Applications`) and open Murmur.
-   Murmur starts `whisper-server` on port 8178 if none is running, and stops only the one it started.
+- **Fast:** text is usually pasted 150–350 ms after you release the key. Speech recognition runs on the Apple Neural Engine.
+- **Clean:** it removes filler words, applies self-corrections ("at three, no wait, four" → "at 4"), writes numbers as digits, fixes punctuation, formats lists, and adjusts to the app you're typing in.
+- **Private:** speech recognition and cleanup both run locally with open models.
+- Inspired by Wispr Flow's experience and tuned against it black-box (see below). Not affiliated with Wispr.
+
+> **Status: early.** You currently build Murmur from source (below). A prebuilt download and a Windows version are in progress.
+
+## Requirements
+- A Mac with Apple Silicon running macOS 14 or later.
+- Xcode Command Line Tools (`xcode-select --install`).
+- [Homebrew](https://brew.sh) `llama.cpp` for the cleanup model: `brew install llama.cpp`. Accurate mode also needs `brew install whisper-cpp`.
+- About 4 GB of disk for models.
+
+## Install from source
+```
+git clone https://github.com/aidanmcjones/murmur && cd murmur
+mkdir -p ~/Library/Application\ Support/Murmur/models
+curl -L -o ~/Library/Application\ Support/Murmur/models/qwen3-4b-instruct-2507-q4_K_M.gguf \
+  https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+scripts/build.sh && scripts/install.sh && open ~/Applications/Murmur.app
+```
+The speech model (Parakeet) downloads on first launch, which takes about a minute. The app is signed locally, not by Apple, so macOS may ask you to confirm the first time you open it: right-click → Open.
 
 ## Permissions
-Menu > Check permissions. Grant Microphone, Accessibility (paste, text-before-cursor) and Input Monitoring (hotkey), then restart Murmur.
-The app is ad-hoc signed, so rebuilding may require re-granting.
+On first launch, allow **Microphone** and **Accessibility**. Accessibility lets Murmur see the hotkey and paste. If dictation doesn't start, open Murmur's menu → **Check permissions**.
 
-## Hotkeys
-- Hold Fn/Globe: record while held (holds under 250 ms are ignored).
-- Fn + Space, or double-tap Fn: hands-free; press Fn again to finish.
-- Esc: cancel.
-- Menu > Hotkey: switch to Right Option. Menu > "Disable Globe emoji popup" stops the emoji picker.
+## Using it
+- **Hold fn/🌐**, speak, release. Holds under 250 ms are ignored.
+- **Double-tap fn**, or fn + Space, for hands-free mode. Press fn again to finish.
+- **Esc** cancels.
+- **Other keyboards:** many third-party keyboards (Keychron, Logitech…) handle fn inside the keyboard, so the Mac never sees it. Use Murmur menu → **Push-to-talk key → Set custom key…** and press a modifier (for example right ⌥) or an F-key.
+- fn shortcuts such as fn+Delete keep working; Murmur cancels quietly when another key is pressed.
+- The menu is under the Dock icon, and the menu-bar icon if your menu bar has room.
 
-## Other
-- Vocabulary/snippets: `~/Library/Application Support/Murmur/dictionary.json`, `[{"phrase","replacement"?}]`.
-- History: `history.jsonl` in the same folder.
-- Anthropic provider: Menu > Set Anthropic key… (Keychain).
-- Headless test: `Murmur --transcribe file.wav --bundle-id com.apple.Terminal [--before "text"]`.
+Settings in the menu:
+- **Speech engine:** Fast (Parakeet, default) or Accurate (Whisper large-v3-turbo; slower, better with background noise).
+- **Vocabulary and snippets:** `~/Library/Application Support/Murmur/dictionary.json`, `[{"phrase": "...", "replacement": "..."}]`. Menu → *Import from Wispr Flow* copies an existing Wispr Flow dictionary.
+- **History:** `history.jsonl` in the same folder.
 
-## Wispr Flow
-Quit Wispr Flow or change its hotkey, otherwise both apps capture the same key.
+If you also run Wispr Flow, quit it or change its hotkey, otherwise both apps react to fn.
+
+## Credits and licenses
+Murmur is MIT-licensed (see `LICENSE`). It builds on:
+- [FluidAudio](https://github.com/FluidInference/FluidAudio) (Apache-2.0), which runs NVIDIA Parakeet TDT speech models on CoreML. See each model's card for its license; Parakeet TDT models are CC-BY-4.0.
+- [llama.cpp](https://github.com/ggml-org/llama.cpp) and [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (MIT).
+- Qwen3-4B-Instruct-2507 (Apache-2.0) for cleanup, and OpenAI Whisper large-v3-turbo (MIT) for Accurate mode.
+
+---
+
+# Development notes
+
+Headless test: `Murmur --transcribe file.wav --bundle-id com.apple.Terminal [--before "text"]`. Debug log: `~/Library/Application Support/Murmur/debug.log`.
 
 ## How it matches Wispr Flow (clean-room)
 
