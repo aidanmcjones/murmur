@@ -19,15 +19,21 @@ function Wer($ref, $hyp) {
     }
     return $d[$ref.Count, $hyp.Count] / [Math]::Max($ref.Count, 1)
 }
-$out = Join-Path $env:TEMP 'murmur-transcribe-out.txt'
-$err = Join-Path $env:TEMP 'murmur-transcribe-err.txt'
-$p = Start-Process -FilePath $Murmur -ArgumentList @('--transcribe', "`"$Wav`"") -Wait -PassThru -NoNewWindow `
-    -RedirectStandardOutput $out -RedirectStandardError $err
-$text = ("" + (Get-Content -Raw $out)).Trim()
-Write-Host "exit=$($p.ExitCode) stdout='$text'"
-Write-Host ("stderr: " + (Get-Content -Raw $err))
-if (Test-Path "$env:MURMUR_APPDATA\debug.log") { Write-Host '--- debug.log ---'; Get-Content "$env:MURMUR_APPDATA\debug.log" | Select-Object -Last 30 }
-if ($p.ExitCode -ne 0) { throw "murmur --transcribe exited with $($p.ExitCode)" }
+$psi = New-Object System.Diagnostics.ProcessStartInfo
+$psi.FileName = $Murmur
+$psi.Arguments = "--transcribe `"$Wav`""
+$psi.RedirectStandardOutput = $true
+$psi.RedirectStandardError = $true
+$psi.UseShellExecute = $false
+$psi.CreateNoWindow = $true
+$proc = [System.Diagnostics.Process]::Start($psi)
+$errTask = $proc.StandardError.ReadToEndAsync()
+$text = $proc.StandardOutput.ReadToEnd().Trim()
+$proc.WaitForExit()
+Write-Host "exit=$($proc.ExitCode) stdout='$text'"
+Write-Host ("stderr: " + $errTask.Result)
+if ($env:MURMUR_APPDATA -and (Test-Path "$env:MURMUR_APPDATA\debug.log")) { Write-Host '--- debug.log ---'; Get-Content "$env:MURMUR_APPDATA\debug.log" | Select-Object -Last 30 }
+if ($proc.ExitCode -ne 0) { throw "murmur --transcribe exited with $($proc.ExitCode)" }
 $wer = Wer (Norm $Expected) (Norm $text)
 Write-Host "WER vs '$Expected' = $wer"
 if ($wer -gt $MaxWer) { throw "Transcript '$text' is too far from '$Expected' (WER $wer > $MaxWer)" }
