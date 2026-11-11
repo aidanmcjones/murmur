@@ -5,9 +5,11 @@ Murmur is a local push-to-talk dictation app. When the user asks you to install 
 ## Install
 
 1. Detect the OS (`uname -s`, or `$OS` / `ver` on Windows).
-2. macOS (Apple Silicon, macOS 14+): from the repo root run `scripts/setup.sh --no-open`, then open the app with `open ~/Applications/Murmur.app`. It is idempotent and non-interactive. Options: `--prefix DIR` (default `~/Applications`), `--accurate` (Whisper mode, needs Homebrew; otherwise it stays off and the script says so).
+2. macOS (Apple Silicon, macOS 14+): from the repo root run `scripts/setup.sh --no-open`, then open the app with `open ~/Applications/Murmur.app`. It is idempotent and non-interactive. Options: `--prefix DIR` (default `~/Applications`), `--force`, `--accurate` (Whisper mode, needs Homebrew; otherwise it stays off and the script says so).
 3. Windows (beta): `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1`.
 4. Any other OS or Intel Mac is unsupported: say so and stop.
+
+If Murmur is already running from the install folder, the script finishes downloads, leaves the installed app alone and exits 0 saying "Quit Murmur and re-run, or pass --force": ask the user before quitting it or using `--force`.
 
 Exit code 3 from `setup.sh` means the Xcode Command Line Tools install dialog was opened. Tell the user to finish it, then re-run the script. Exit 4 means a download failed: re-run (downloads resume).
 
