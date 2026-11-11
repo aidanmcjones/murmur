@@ -30,6 +30,7 @@ while [ $# -gt 0 ]; do
 done
 
 SUPPORT="${MURMUR_SUPPORT_DIR:-$HOME/Library/Application Support/Murmur}"
+CURLQ="--progress-bar"; [ -t 1 ] || CURLQ="-sS"
 say() { printf '==> %s\n' "$*"; }
 
 # 1. System checks.
@@ -57,7 +58,7 @@ fetch_big() {
   if [ -f "$dest" ] && [ "$(size_of "$dest")" = "$size" ]; then say "Reusing $(basename "$dest")"; return 0; fi
   rm -f "$dest"
   for i in 1 2 3 4 5; do
-    curl -L --fail --retry 3 -C - -o "$part" "$url" || true
+    curl $CURLQ -L --fail --retry 3 -C - -o "$part" "$url" || true
     if [ -f "$part" ] && [ "$(size_of "$part")" = "$size" ]; then mv "$part" "$dest"; return 0; fi
     if [ -f "$part" ] && [ "$(size_of "$part")" -gt "$size" ]; then rm -f "$part"; fi
     echo "Download incomplete (attempt $i/5), retrying..." >&2
@@ -74,7 +75,7 @@ else
     say "Reusing llama.cpp $LLAMA_TAG"
   else
     say "Downloading llama.cpp $LLAMA_TAG"
-    curl -L --fail --retry 3 -o "$TMP/llama.tar.gz" "$LLAMA_URL" || { echo "llama.cpp download failed" >&2; exit 4; }
+    curl $CURLQ -L --fail --retry 3 -o "$TMP/llama.tar.gz" "$LLAMA_URL" || { echo "llama.cpp download failed" >&2; exit 4; }
     [ "$(sha_of "$TMP/llama.tar.gz")" = "$LLAMA_SHA256" ] || { echo "llama.cpp checksum mismatch" >&2; exit 4; }
     mkdir -p "$TMP/llama"
     tar -xzf "$TMP/llama.tar.gz" -C "$TMP/llama"
