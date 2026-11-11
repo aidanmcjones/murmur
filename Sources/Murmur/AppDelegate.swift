@@ -107,6 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         recorder.onBuffer = { [weak self] r, n in self?.specBuffer(rms: r, count: n) }
         recorder.onLimit = { [weak self] in self?.hotkey.reset(); self?.finishRecording() }
         Settings.migrateHotkey()
+        VocabLearner.installDebugHooks()
         hotkey.onStart = { [weak self] in self?.beginRecording() ?? false }
         hotkey.onStop = { [weak self] in self?.finishRecording() }
         hotkey.onCancel = { [weak self] in self?.cancelRecording() }
@@ -171,6 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let app = NSWorkspace.shared.frontmostApplication
         ctx = AppContext(bundleId: app?.bundleIdentifier ?? "", appName: app?.localizedName ?? "", before: "")
         specReset()
+        VocabLearner.shared.stop(evaluate: true)
         guard recorder.start() else {
             DebugLog.log("beginRecording: recorder.start failed")
             Toast.show(recorder.lastError ?? "Microphone failed to start", seconds: 4)
@@ -248,6 +250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 DebugLog.log("finish: result=\(result == nil ? "nil" : "len=\(result!.final.count)") spec=\(useSpec) total=\(Int(Date().timeIntervalSince(t0) * 1000))ms")
                 if let r = result {
                     Inserter.insert(r.final, bundleId: c.bundleId)
+                    VocabLearner.shared.pasted(r.final, bundleId: c.bundleId)
                     History.append(HistoryEntry(ts: ISO8601DateFormatter().string(from: t0), raw: r.raw, cleaned: r.final,
                                                 app: c.bundleId, asrMs: r.asrMs, llmMs: r.llmMs,
                                                 totalMs: Int(Date().timeIntervalSince(t0) * 1000), spec: useSpec,
@@ -310,6 +313,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
 
         add(menu, "Edit vocabulary", #selector(editVocabulary))
+        add(menu, "Learn vocabulary from my edits", #selector(toggleLearn)).state = Settings.learnVocab ? .on : .off
         add(menu, "Import from Wispr Flow", #selector(importWispr))
 
         let recent = NSMenuItem(title: "Recent", action: nil, keyEquivalent: "")
@@ -358,6 +362,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let r = s.representedObject as? String, let p = Provider(rawValue: r) { Settings.provider = p }
     }
 
+    @objc private func toggleLearn() {
+        Settings.learnVocab.toggle()
+        if !Settings.learnVocab { VocabLearner.shared.stop() }
+    }
     @objc private func toggleFn() {
         Settings.useFn.toggle(); hotkey.reset()
     }

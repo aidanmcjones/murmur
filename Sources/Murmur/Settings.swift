@@ -65,6 +65,15 @@ enum Settings {
         get { UserDefaults.standard.object(forKey: "useFn") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "useFn") }
     }
+    static var learnVocab: Bool {
+        get { UserDefaults.standard.object(forKey: "learnVocab") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "learnVocab") }
+    }
+    /// "heard|wanted" pairs (lowercased) the user asked never to be offered again.
+    static var rejectedPairs: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: "rejectedVocabPairs") ?? []) }
+        set { UserDefaults.standard.set(Array(newValue).sorted(), forKey: "rejectedVocabPairs") }
+    }
     /// Optional extra push-to-talk key (virtual keycode); nil = none.
     static var customKey: Int? {
         get { UserDefaults.standard.object(forKey: "customKeyCode") as? Int }
@@ -130,6 +139,19 @@ enum UserDictionary {
         let enc = JSONEncoder()
         enc.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
         if let d = try? enc.encode(entries) { try? d.write(to: Paths.dictionary) }
+    }
+
+    /// Adds the deterministic fix (heard -> wanted) and the plain vocabulary term; returns entries added.
+    @discardableResult
+    static func addLearned(heard: String, wanted: String) -> Int {
+        var entries = load()
+        var added = 0
+        let hasFix = entries.contains { $0.phrase.lowercased() == heard.lowercased() && !($0.replacement ?? "").isEmpty }
+        if !hasFix { entries.append(DictEntry(phrase: heard, replacement: wanted)); added += 1 }
+        let hasTerm = entries.contains { $0.phrase.lowercased() == wanted.lowercased() && ($0.replacement ?? "").isEmpty }
+        if !hasTerm { entries.append(DictEntry(phrase: wanted)); added += 1 }
+        if added > 0 { save(entries) }
+        return added
     }
 
     static func ensureFile() {
@@ -214,6 +236,8 @@ enum History {
     static func recent(_ n: Int = 20) -> [HistoryEntry] {
         guard let s = try? String(contentsOf: Paths.history, encoding: .utf8) else { return [] }
         let dec = JSONDecoder()
-        return s.split(separator: "\n").suffix(n).compactMap { try? dec.decode(HistoryEntry.self, from: Data($0.utf8)) }.reversed()
+        let all = s.split(separator: "\n").compactMap { try? dec.decode(HistoryEntry.self, from: Data($0.utf8)) }
+        // Vocabulary-learning events share the file but are not transcripts.
+        return all.filter { !($0.mode ?? "").hasPrefix("vocab-") }.suffix(n).reversed()
     }
 }
