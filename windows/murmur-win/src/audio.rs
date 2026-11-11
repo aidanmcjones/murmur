@@ -3,7 +3,7 @@
 use crate::util::log;
 use crate::wav;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::FromSample;
+use cpal::{FromSample, Sample};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
