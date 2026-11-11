@@ -5,7 +5,8 @@ import Foundation
 protocol AXNode {
     /// Attribute value as a Swift value (String, Bool, NSNumber, NSAttributedString...), nil when unavailable.
     func attr(_ name: String) -> Any?
-    func children() -> [AXNode]
+    /// At most `limit` children (the first ones).
+    func children(limit: Int) -> [AXNode]
     func stringForRange(location: Int, length: Int) -> String?
 }
 
@@ -18,11 +19,16 @@ enum AXRead {
     }
 
     /// Web areas / groups report focus on a container: walk down to the focused text area / field / contenteditable.
-    static func descendFocused(_ n: AXNode, depth: Int = 0) -> AXNode {
+    static let maxChildren = 64
+    static let walkBudget: TimeInterval = 0.15
+
+    /// One overall deadline bounds the whole walk (per-call timeouts must not add up); call off the main thread.
+    static func descendFocused(_ n: AXNode, deadline: Date = Date().addingTimeInterval(walkBudget), depth: Int = 0) -> AXNode {
         if let role = n.attr("AXRole") as? String, textRoles.contains(role) { return n }
-        guard depth < 6 else { return n }
-        for k in n.children().prefix(100) where (k.attr("AXFocused") as? Bool) == true {
-            return descendFocused(k, depth: depth + 1)
+        guard depth < 6, Date() < deadline else { return n }
+        for k in n.children(limit: maxChildren) {
+            if Date() >= deadline { return n }
+            if (k.attr("AXFocused") as? Bool) == true { return descendFocused(k, deadline: deadline, depth: depth + 1) }
         }
         return n
     }
@@ -45,7 +51,7 @@ enum AXRead {
         var range: String?
         init(_ props: [String: Any] = [:], kids: [Fake] = [], range: String? = nil) { self.props = props; self.kids = kids; self.range = range }
         func attr(_ name: String) -> Any? { props[name] }
-        func children() -> [AXNode] { kids }
+        func children(limit: Int) -> [AXNode] { Array(kids.prefix(limit)) }
         func stringForRange(location: Int, length: Int) -> String? { range.map { String($0.prefix(length)) } }
     }
 
@@ -83,6 +89,22 @@ enum AXRead {
         var deep = Fake(["AXRole": "AXTextArea", "AXFocused": true])
         for _ in 0..<10 { deep = Fake(["AXRole": "AXGroup", "AXFocused": true], kids: [deep]) }
         check("depth-bounded", (descendFocused(deep) as? Fake)?.props["AXRole"] as? String == "AXGroup")
+        // Children are capped and the walk has an overall deadline.
+        var many = (0..<80).map { _ in Fake(["AXRole": "AXGroup", "AXFocused": false]) }
+        many.append(Fake(["AXRole": "AXTextArea", "AXFocused": true]))
+        let wide = Fake(["AXRole": "AXWebArea"], kids: many)
+        check("child-cap-respected", (descendFocused(wide) as? Fake) === wide)
+        check("expired-deadline-returns-immediately", descendFocused(web, deadline: Date.distantPast) as? Fake === web)
+        final class Slow: AXNode {
+            var calls = 0
+            func attr(_ name: String) -> Any? { calls += 1; Thread.sleep(forTimeInterval: 0.05); return name == "AXRole" ? "AXGroup" : false }
+            func children(limit: Int) -> [AXNode] { Array(repeating: self, count: limit) }
+            func stringForRange(location: Int, length: Int) -> String? { nil }
+        }
+        let slow = Slow()
+        let t0 = Date()
+        _ = descendFocused(slow)
+        check("slow-walk-bounded", Date().timeIntervalSince(t0) < 0.4 && slow.calls < 12)
         return fails
     }
 }
@@ -97,9 +119,11 @@ struct RealAX: AXNode {
         return AXUIElementCopyAttributeValue(el, name as CFString, &r) == .success ? r : nil
     }
 
-    func children() -> [AXNode] {
-        guard let arr = attr("AXChildren") as? [AXUIElement] else { return [] }
-        return arr.map { k in AXUIElementSetMessagingTimeout(k, 0.4); return RealAX(k) }
+    func children(limit: Int) -> [AXNode] {
+        var vals: CFArray?
+        guard AXUIElementCopyAttributeValues(el, "AXChildren" as CFString, 0, limit, &vals) == .success,
+              let arr = vals as? [AXUIElement] else { return [] }
+        return arr.map { k in AXUIElementSetMessagingTimeout(k, 0.1); return RealAX(k) }
     }
 
     func stringForRange(location: Int, length: Int) -> String? {

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// Extra evidence for loosened candidate rules: phonetic keys and acronym / initialism matching.
@@ -70,6 +71,17 @@ extension VocabDiff {
         return k == syms.count
     }
 
+    /// A plain misspelling of a common word ("recieve" -> "receive"): the new word is lowercase and known, the old one is
+    /// unknown and close, and the system spellchecker itself would offer the new word among its top 3 corrections.
+    static func isCommonTypoFix(_ old: String, _ new: String) -> Bool {
+        guard new.allSatisfy({ $0.isLowercase }), old.allSatisfy({ $0.isLetter }),
+              !unknownToSpellChecker(new), unknownToSpellChecker(old),
+              levenshtein(Array(old.lowercased()), Array(new)) <= 2 else { return false }
+        let g = NSSpellChecker.shared.guesses(forWordRange: NSRange(location: 0, length: (old as NSString).length), in: old,
+                                              language: "en", inSpellDocumentWithTag: 0) ?? []
+        return g.prefix(3).contains { $0.lowercased() == new }
+    }
+
     /// Strongly vocab-like: digits, internal caps, acronym, or unknown to the spellchecker (known capitalised words never qualify).
     static func strongVocab(_ w: String) -> Bool {
         if w.contains(where: { $0.isNumber }) { return true }
@@ -96,6 +108,10 @@ extension VocabDiff {
         check("acronym-all-caps", "the ay pee eye docs", "the API docs", nil)  // 3 words -> 1 acronym, no evidence: stays conservative
         check("digits-with-similarity", "call the model gpt four", "call the model GPT4", "gpt four -> GPT4")
         check("internal-caps", "use the ex eye ess dock", "use the XyZ dock", nil)
+        for (bad, good) in [("recieve", "receive"), ("definately", "definitely"), ("teh", "the"), ("seperate", "separate"),
+                            ("occured", "occurred"), ("untill", "until")] {
+            check("neg-typo-\(bad)", "I will \(bad) it soon", "I will \(good) it soon", nil)
+        }
         check("neg-ship-launch", "ship it", "launch it", nil)
         check("neg-meeting-tuesday", "move the meeting soon", "move the Tuesday soon", nil)
         check("neg-number", "let's meet at 3", "let's meet at 4", nil)

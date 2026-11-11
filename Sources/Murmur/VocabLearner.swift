@@ -110,6 +110,7 @@ enum VocabDiff {
             // A real word replacing a non-word that sounds alike (e.g. zoanthellae -> zooxanthellae).
             if !vocab, sim >= 0.7, !caseOnly, old.contains(where: { unknownToSpellChecker($0) }) { vocab = true }
             if !vocab { continue }
+            if old.count == 1, new.count == 1, isCommonTypoFix(old[0], new[0]) { continue }
             let ol = norm(old).count, nl = norm(new).count
             let sameFirst = norm(old).first == norm(new).first
             let lenRatio = Double(min(ol, nl)) / Double(max(1, max(ol, nl)))
@@ -364,7 +365,8 @@ final class VocabLearner {
     private var replay: ReplayModel?
     private var axReadable = false
     private var tiers: Set<String> = ["ax", "replay", "ocr"]
-    private var enhancedApp: AXUIElement?
+    private var axRestore: (app: AXUIElement, manual: Bool, enhanced: Bool)?
+    private var focusCheckInFlight = false
     private var mouseSeq = 0
     private var ocrReady = false
     private var ocrRuns = 0
@@ -396,9 +398,17 @@ final class VocabLearner {
         return el
     }
 
-    private func focusedTextElement(pid: pid_t) -> AXUIElement? {
-        guard let el = focusedElement(pid: pid) else { return nil }
-        return (AXRead.descendFocused(RealAX(el)) as? RealAX)?.el ?? el
+    private static let axQueue = DispatchQueue(label: "murmur.vocab.ax", qos: .userInitiated)
+
+    /// Focused text element, resolved off the main thread (the web-area walk is deadline-bounded); `done` runs on main.
+    private func resolveFocusedText(pid: pid_t, _ done: @escaping (AXUIElement?) -> Void) {
+        Self.axQueue.async { [self] in
+            var out: AXUIElement?
+            if let el = focusedElement(pid: pid) {
+                out = (AXRead.descendFocused(RealAX(el)) as? RealAX)?.el ?? el
+            }
+            DispatchQueue.main.async { done(out) }
+        }
     }
 
     private func isSecure(_ el: AXUIElement) -> Bool { AXRead.isSecure(RealAX(el)) }
@@ -416,15 +426,44 @@ final class VocabLearner {
     private func selectionLocation(_ el: AXUIElement) -> Int? { selectionRange(el)?.location }
 
     /// Electron/Chromium expose their tree only on request; browsers also get AXEnhancedUserInterface while watching.
+    /// Only attributes that were not already on are set, recorded (for crash recovery) and restored in stop().
     private func prepareAX(pid: pid_t, bundleId: String) {
         let app = appElement(pid)
-        AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
-        guard Self.browserPrefixes.contains(where: { bundleId.hasPrefix($0) }) else { return }
-        var cur: CFTypeRef?
-        let prev = AXUIElementCopyAttributeValue(app, "AXEnhancedUserInterface" as CFString, &cur) == .success ? ((cur as? Bool) ?? false) : false
-        if !prev, AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue) == .success {
-            enhancedApp = app
+        func isOn(_ attr: String) -> Bool {
+            var cur: CFTypeRef?
+            return AXUIElementCopyAttributeValue(app, attr as CFString, &cur) == .success && (cur as? Bool) == true
         }
+        var manual = false, enhanced = false
+        if !isOn("AXManualAccessibility"),
+           AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue) == .success { manual = true }
+        if Self.browserPrefixes.contains(where: { bundleId.hasPrefix($0) }), !isOn("AXEnhancedUserInterface"),
+           AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue) == .success { enhanced = true }
+        guard manual || enhanced else { return }
+        axRestore = (app, manual, enhanced)
+        UserDefaults.standard.set(["pid": Int(pid), "bundleId": bundleId, "manual": manual, "enhanced": enhanced], forKey: Self.axRecordKey)
+    }
+
+    private static let axRecordKey = "axAttrRecord"
+
+    private static func resetAttrs(_ app: AXUIElement, manual: Bool, enhanced: Bool) {
+        if manual { AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanFalse) }
+        if enhanced { AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanFalse) }
+    }
+
+    private func restoreAX() {
+        if let r = axRestore { Self.resetAttrs(r.app, manual: r.manual, enhanced: r.enhanced) }
+        axRestore = nil
+        UserDefaults.standard.removeObject(forKey: Self.axRecordKey)
+    }
+
+    /// After a crash the attributes may still be set on the target app: undo them if that process is still running.
+    static func recoverAXAttrs() {
+        guard let rec = UserDefaults.standard.dictionary(forKey: axRecordKey) else { return }
+        UserDefaults.standard.removeObject(forKey: axRecordKey)
+        guard let pid = rec["pid"] as? Int, let bid = rec["bundleId"] as? String,
+              NSRunningApplication(processIdentifier: pid_t(pid))?.bundleIdentifier == bid else { return }
+        resetAttrs(AXUIElementCreateApplication(pid_t(pid)), manual: rec["manual"] as? Bool ?? false, enhanced: rec["enhanced"] as? Bool ?? false)
+        DebugLog.log("learn: restored AX attributes after unclean exit app=\(bid)")
     }
 
     private func frame(_ el: AXUIElement) -> CGRect? {
@@ -436,9 +475,8 @@ final class VocabLearner {
     }
 
     /// Region to OCR: the focused element's frame, else the caret's neighbourhood, else the focused window.
-    private func captureRect() -> CGRect? {
+    private func captureRect(el: AXUIElement?) -> CGRect? {
         let app = appElement(pid)
-        let el = focusedTextElement(pid: pid)
         if let el, let f = frame(el), f.width > 20, f.height > 10, f.width * f.height <= 1_500_000 { return f.insetBy(dx: -10, dy: -10) }
         if let el, let sel = selectionRange(el) {
             var range = CFRange(location: max(0, sel.location - 1), length: 1)
@@ -484,16 +522,26 @@ final class VocabLearner {
         DispatchQueue.main.asyncAfter(deadline: .now() + d) { [weak self] in
             guard let self, gen == self.generation else { return }
             let last = delays.count == 1
-            if self.begin(text, bundleId: bundleId, pid: pid, final: last) { return }
-            self.attempt(text, bundleId: bundleId, pid: pid, gen: gen, delays: Array(delays.dropFirst()))
+            self.begin(text, bundleId: bundleId, pid: pid, final: last) { done in
+                if done || gen != self.generation { return }
+                self.attempt(text, bundleId: bundleId, pid: pid, gen: gen, delays: Array(delays.dropFirst()))
+            }
         }
     }
 
     /// Looks for a readable field holding the paste. Returns true when done (found, replay-only, or aborted).
-    private func begin(_ text: String, bundleId: String, pid: pid_t, final: Bool) -> Bool {
-        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { stop(); return true }
-        guard tiers.contains("ax") else { noAX(text); return true }
-        if let el = focusedTextElement(pid: pid) {
+    private func begin(_ text: String, bundleId: String, pid: pid_t, final: Bool, done: @escaping (Bool) -> Void) {
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { stop(); done(true); return }
+        guard tiers.contains("ax") else { noAX(text); done(true); return }
+        let gen = generation
+        resolveFocusedText(pid: pid) { [weak self] el in
+            guard let self, gen == self.generation else { done(true); return }
+            done(self.beginWith(el, text, pid: pid, final: final))
+        }
+    }
+
+    private func beginWith(_ focused: AXUIElement?, _ text: String, pid: pid_t, final: Bool) -> Bool {
+        if let el = focused {
             if isSecure(el) { stop(); return true }
             if let v = value(el), (v as NSString).length <= Self.maxChars {
                 let ns = v as NSString
@@ -529,8 +577,15 @@ final class VocabLearner {
     /// No readable text: rely on key replay, and prepare the OCR baseline when permitted.
     private func noAX(_ text: String) {
         DebugLog.log("learn: ax unreadable, replay-only")
-        guard tiers.contains("ocr"), ScreenOCR.granted, let rect = captureRect() else { return }
+        guard tiers.contains("ocr"), ScreenOCR.granted else { return }
         let gen = generation
+        resolveFocusedText(pid: pid) { [weak self] el in
+            guard let self, gen == self.generation, let rect = self.captureRect(el: el) else { return }
+            self.baselineOCR(rect: rect, text: text, gen: gen)
+        }
+    }
+
+    private func baselineOCR(rect: CGRect, text: String, gen: Int) {
         Task.detached {
             guard let img = await ScreenOCR.capture(rect), let t = ScreenOCR.recognize(img) else { return }
             let ok = VocabDiff.fuzzyContains(pasted: text, buffer: t)
@@ -554,8 +609,7 @@ final class VocabLearner {
         if let o = observer {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(o), .defaultMode)
         }
-        if let a = enhancedApp { AXUIElementSetAttributeValue(a, "AXEnhancedUserInterface" as CFString, kCFBooleanFalse) }
-        enhancedApp = nil
+        restoreAX()
         observer = nil; element = nil; dirtyAt = nil; axReadable = false; ocrReady = false
     }
 
@@ -602,18 +656,24 @@ final class VocabLearner {
             || NSWorkspace.shared.frontmostApplication?.processIdentifier != pid {
             stop(evaluate: true); return
         }
-        if let el = element {
-            // The focused element can flap while a terminal redraws: tolerate a short mismatch.
-            let cur = focusedTextElement(pid: pid)
-            if let c = cur, isSecure(c) { stop(); return }
-            if cur.map({ CFEqual($0, el) }) != true {
-                let since = focusLostSince ?? Date()
-                focusLostSince = since
-                if Date().timeIntervalSince(since) > Self.focusGrace { stop(evaluate: true) }
-                return
+        if let el = element, !focusCheckInFlight {
+            focusCheckInFlight = true
+            let gen = generation
+            resolveFocusedText(pid: pid) { [weak self] cur in
+                guard let self else { return }
+                self.focusCheckInFlight = false
+                guard gen == self.generation, self.watching else { return }
+                if let c = cur, self.isSecure(c) { self.stop(); return }
+                // The focused element can flap while a terminal redraws: tolerate a short mismatch.
+                if cur.map({ CFEqual($0, el) }) != true {
+                    let since = self.focusLostSince ?? Date()
+                    self.focusLostSince = since
+                    if Date().timeIntervalSince(since) > Self.focusGrace { self.stop(evaluate: true) }
+                    return
+                }
+                self.focusLostSince = nil
+                if let v = self.value(el), v != self.lastValue { self.lastValue = v; self.dirtyAt = Date() }
             }
-            focusLostSince = nil
-            if let v = value(el), v != lastValue { lastValue = v; dirtyAt = Date() }
         }
         if let d = dirtyAt, Date().timeIntervalSince(d) >= Self.debounce {
             dirtyAt = nil
@@ -668,8 +728,14 @@ final class VocabLearner {
 
     /// Screen-text tier: only when AX had nothing readable and replay produced nothing.
     private func runOCR(gen: Int, text: String, dict: [DictEntry], rej: Set<String>) {
-        guard let rect = captureRect() else { return }
         ocrRuns += 1
+        resolveFocusedText(pid: pid) { [weak self] el in
+            guard let self, gen == self.generation, let rect = self.captureRect(el: el) else { return }
+            self.runOCR(rect: rect, gen: gen, text: text, dict: dict, rej: rej)
+        }
+    }
+
+    private func runOCR(rect: CGRect, gen: Int, text: String, dict: [DictEntry], rej: Set<String>) {
         Task.detached {
             guard let img = await ScreenOCR.capture(rect), let after = ScreenOCR.recognize(img) else { return }
             let found = VocabDiff.fuzzyCandidate(pasted: text, buffer: after, dictionary: dict, rejected: rej)

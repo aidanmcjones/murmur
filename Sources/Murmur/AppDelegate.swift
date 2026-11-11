@@ -108,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         recorder.onLimit = { [weak self] in self?.hotkey.reset(); self?.finishRecording() }
         Settings.migrateHotkey()
         VocabLearner.installDebugHooks()
+        VocabLearner.recoverAXAttrs()
         hotkey.onStart = { [weak self] in self?.beginRecording() ?? false }
         hotkey.onStop = { [weak self] in self?.finishRecording() }
         hotkey.onCancel = { [weak self] in self?.cancelRecording() }
@@ -126,7 +127,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for sig in [SIGTERM, SIGINT] {
             signal(sig, SIG_IGN)
             let src = DispatchSource.makeSignalSource(signal: sig, queue: .main)
-            src.setEventHandler { WhisperServer.shared.shutdown(); LocalLLM.shared.shutdown(); exit(0) }
+            src.setEventHandler { VocabLearner.shared.stop(); WhisperServer.shared.shutdown(); LocalLLM.shared.shutdown(); exit(0) }
             src.resume()
             signalSources.append(src)
         }
@@ -147,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        VocabLearner.shared.stop()
         WhisperServer.shared.shutdown()
         LocalLLM.shared.shutdown()
     }
