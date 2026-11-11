@@ -35,6 +35,7 @@ pub enum LCmd {
     Pasted { text: String, exe: String },
     Key { vk: u32, mods: KeyMods, chars: String },
     Mouse,
+    MouseUp,
     Stop,
     /// Text before the caret in the focused field.
     Probe(Sender<String>),
@@ -78,6 +79,8 @@ pub struct Field {
     /// Caret/selection start as a UTF-16 offset into `text`.
     pub caret: Option<usize>,
     pub password: bool,
+    /// Current selection: (start UTF-16 offset in `text`, length, selected text); None when empty/unknown.
+    pub sel: Option<(usize, usize, String)>,
 }
 
 /// A focused text element: a UI Automation element, or a classic Win32 Edit/RichEdit control (read with
@@ -116,7 +119,7 @@ fn read_native(h: HWND) -> Option<Field> {
             return None;
         }
         if class == "edit" && (GetWindowLongW(h, GWL_STYLE) as u32) & ES_PASSWORD != 0 {
-            return Some(Field { text: String::new(), caret: None, password: true });
+            return Some(Field { text: String::new(), caret: None, password: true, sel: None });
         }
         let len = send_timeout(h, WM_GETTEXTLENGTH, 0, 0)?;
         if len > MAX_CHARS {
@@ -130,7 +133,16 @@ fn read_native(h: HWND) -> Option<Field> {
             let s = (start as usize).min(raw.len());
             utf16_len(&String::from_utf16_lossy(&raw[..s]).replace("\r\n", "\n"))
         });
-        Some(Field { text: String::from_utf16_lossy(raw).replace("\r\n", "\n"), caret, password: false })
+        let sel = if end > start {
+            let s0 = (start as usize).min(raw.len());
+            let e0 = (end as usize).min(raw.len());
+            let pre = utf16_len(&String::from_utf16_lossy(&raw[..s0]).replace("\r\n", "\n"));
+            let txt = String::from_utf16_lossy(&raw[s0..e0]).replace("\r\n", "\n");
+            Some((pre, utf16_len(&txt), txt))
+        } else {
+            None
+        };
+        Some(Field { text: String::from_utf16_lossy(raw).replace("\r\n", "\n"), caret, password: false, sel })
     }
 }
 
@@ -188,7 +200,7 @@ impl Uia {
     fn read_ui(&self, el: &IUIAutomationElement) -> Option<Field> {
         unsafe {
             if el.CurrentIsPassword().map(|b| b.as_bool()).unwrap_or(false) {
-                return Some(Field { text: String::new(), caret: None, password: true });
+                return Some(Field { text: String::new(), caret: None, password: true, sel: None });
             }
             if let Ok(unk) = el.GetCurrentPattern(UIA_TextPatternId) {
                 if let Ok(tp) = unk.cast::<IUIAutomationTextPattern>() {
@@ -199,6 +211,7 @@ impl Uia {
                                 return None;
                             }
                             let mut caret = None;
+                            let mut selection = None;
                             if let Ok(sel) = tp.GetSelection() {
                                 if sel.Length().unwrap_or(0) > 0 {
                                     if let (Ok(r), Ok(pre)) = (sel.GetElement(0), doc.Clone()) {
@@ -207,13 +220,20 @@ impl Uia {
                                             .is_ok()
                                         {
                                             if let Ok(p) = pre.GetText((MAX_CHARS + 1) as i32) {
-                                                caret = Some(utf16_len(&p.to_string().replace("\r\n", "\n")));
+                                                let c = utf16_len(&p.to_string().replace("\r\n", "\n"));
+                                                caret = Some(c);
+                                                if let Ok(st) = r.GetText((MAX_CHARS + 1) as i32) {
+                                                    let txt = st.to_string().replace("\r\n", "\n");
+                                                    if !txt.is_empty() {
+                                                        selection = Some((c, utf16_len(&txt), txt));
+                                                    }
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
-                            return Some(Field { text: raw.replace("\r\n", "\n"), caret, password: false });
+                            return Some(Field { text: raw.replace("\r\n", "\n"), caret, password: false, sel: selection });
                         }
                     }
                 }
@@ -225,7 +245,7 @@ impl Uia {
                         if raw.chars().count() > MAX_CHARS {
                             return None;
                         }
-                        return Some(Field { text: raw.replace("\r\n", "\n"), caret: None, password: false });
+                        return Some(Field { text: raw.replace("\r\n", "\n"), caret: None, password: false, sel: None });
                     }
                 }
             }
@@ -252,6 +272,13 @@ pub fn read_focused_text() -> Option<String> {
 
 // ---- learner -----------------------------------------------------------------------------------
 
+/// A selection lookup due at `at`; `fallback` is the triggering key, replayed if the field cannot answer.
+struct PendingSel {
+    at: Instant,
+    fallback: Option<Event>,
+    via: &'static str,
+}
+
 struct Watch {
     pasted: String,
     exe: String,
@@ -267,7 +294,7 @@ struct Watch {
     replay: ReplayModel,
     attempts: Vec<Instant>,
     resolved: bool,
-    pending_mouse: Option<Instant>,
+    pending_sel: Option<PendingSel>,
 }
 
 fn find_region(value: &str, text: &str, caret: Option<usize>) -> Option<(usize, usize)> {
@@ -300,7 +327,7 @@ fn pending_watch(text: &str, exe: &str, pid: u32) -> Watch {
         replay: ReplayModel::new(text),
         attempts: [150u64, 500, 1000, 2000].iter().map(|ms| now + Duration::from_millis(*ms)).collect(),
         resolved: false,
-        pending_mouse: None,
+        pending_sel: None,
     }
 }
 
@@ -355,7 +382,6 @@ fn evaluate(uia: &Uia, w: &Watch, final_: bool) -> Option<(Candidate, &'static s
             ax_now = Some(f.text);
         }
     }
-    let replay_text = w.replay.result();
     let _ = final_;
     if let Some(v) = &ax_now {
         if let Some((rs, re)) = w.region {
@@ -373,10 +399,8 @@ fn evaluate(uia: &Uia, w: &Watch, final_: bool) -> Option<(Candidate, &'static s
             }
         }
     }
-    if let Some(r) = replay_text {
-        if let Some(c) = vocab::candidate(&w.pasted, &r, &dict, &rej) {
-            return Some((c, "replay"));
-        }
+    if let Some(c) = w.replay.candidate(&dict, &rej) {
+        return Some((c, "replay"));
     }
     None
 }
@@ -419,16 +443,24 @@ impl Learner {
                 }
             }
         }
-        // A click moved the caret: resolve it from UIA shortly after.
-        if let Some(at) = w.pending_mouse {
-            if now >= at {
-                w.pending_mouse = None;
-                let loc = match (&w.element, w.region) {
-                    (Some(el), Some((rs, _))) => uia.read_elem(el).and_then(|f| f.caret).and_then(|c| c.checked_sub(rs)),
-                    _ => None,
-                };
-                w.replay.resolve_caret(loc, 0);
-            }
+        // A mouse selection / Ctrl+A / shift-move past the paste: ask the field what is selected.
+        if w.pending_sel.as_ref().map(|p| now >= p.at).unwrap_or(false) {
+            let p = w.pending_sel.take().unwrap();
+            let sel = match &w.element {
+                Some(el) => uia.read_elem(el).and_then(|f| {
+                    let (start, len, txt) = f.sel.clone().unwrap_or((f.caret.unwrap_or(0), 0, String::new()));
+                    let text = if txt.is_empty() { None } else { Some(txt) };
+                    murmur_core::replay::Selection::from_abs(
+                        text,
+                        f.caret.map(|_| start as i64),
+                        f.caret.map(|_| len as i64),
+                        w.region.map(|r| r.0 as i64),
+                        p.via,
+                    )
+                }),
+                None => None,
+            };
+            w.replay.resolve(sel, p.fallback, "mouse");
         }
         let (_, fpid) = win32::foreground();
         if w.started.elapsed() > Duration::from_secs(WATCH_SECS) || fpid != w.pid {
@@ -509,7 +541,14 @@ impl Learner {
                     mods.alt = false;
                 }
                 if let Some(e) = event_for_key(vk, Mods { ctrl: mods.ctrl, alt: mods.alt, shift: mods.shift, win: mods.win }, &chars) {
-                    w.replay.apply(e);
+                    if w.element.is_some() && w.region.is_some() && w.replay.selection_needs_lookup(&e) {
+                        // The app handles the key first; the lookup then reflects it (the key is the fallback).
+                        w.replay.await_selection();
+                        let via = if e == Event::SelectAll { "ctrl_a" } else { "shift_move" };
+                        w.pending_sel = Some(PendingSel { at: Instant::now() + Duration::from_millis(150), fallback: Some(e), via });
+                    } else {
+                        w.replay.apply(e);
+                    }
                     w.dirty_at = Some(Instant::now());
                 }
             }
@@ -518,9 +557,18 @@ impl Learner {
                 w.dirty_at = Some(Instant::now());
                 if w.element.is_none() || w.region.is_none() {
                     w.replay.mouse_down(false);
-                } else {
-                    w.replay.mouse_down(true);
-                    w.pending_mouse = Some(Instant::now() + Duration::from_millis(120));
+                } else if !w.replay.awaiting() {
+                    w.replay.await_selection();
+                    // Safety net if the button-up never arrives; MouseUp brings the lookup forward.
+                    w.pending_sel = Some(PendingSel { at: Instant::now() + Duration::from_secs(10), fallback: None, via: "mouse" });
+                }
+            }
+            LCmd::MouseUp => {
+                let Some(w) = self.watch.as_mut() else { return };
+                if w.replay.awaiting() {
+                    if let Some(p) = w.pending_sel.as_mut() {
+                        p.at = Instant::now() + Duration::from_millis(120);
+                    }
                 }
             }
             LCmd::Stop => stop(&mut self.watch),

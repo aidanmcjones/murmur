@@ -23,6 +23,32 @@ pub enum Event {
     SelectAll,
     Undo,
     Unsupported,
+    /// A selection reported by the UI after a mouse selection, Ctrl+A or a shift-move past the pasted text.
+    Select(Selection),
+}
+
+/// Selected text and/or its range. `start`/`end` are UTF-16 offsets relative to the start of the original paste
+/// in the field (negative = before it); only set when the field value is readable. `via` is informational.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct Selection {
+    pub text: Option<String>,
+    pub start: Option<i64>,
+    pub end: Option<i64>,
+    pub via: String,
+}
+
+impl Selection {
+    /// From an absolute range in the field value: relative offsets only when the paste's start is known.
+    pub fn from_abs(text: Option<String>, location: Option<i64>, length: Option<i64>, region_start: Option<i64>, via: &str) -> Option<Selection> {
+        let mut s = Selection { text, start: None, end: None, via: via.into() };
+        if let (Some(rs), Some(l), Some(n)) = (region_start, location, length) {
+            if l >= 0 && n >= 0 {
+                s.start = Some(l - rs);
+                s.end = Some(l + n - rs);
+            }
+        }
+        if s.text.is_none() && s.start.is_none() { None } else { Some(s) }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -37,6 +63,11 @@ pub struct Counts {
 #[derive(Clone, Debug)]
 pub struct ReplayModel {
     original: String,
+    /// Characters of `original` before / after the paste (learned from selections crossing its boundary).
+    lead: usize,
+    trail: usize,
+    /// UTF-16 offset of chars[0] relative to the start of the original paste (<= 0).
+    origin: i64,
     chars: Vec<char>,
     cursor: usize,
     anchor: usize,
@@ -57,6 +88,9 @@ impl ReplayModel {
         let cursor = chars.len();
         ReplayModel {
             original: pasted.to_string(),
+            lead: 0,
+            trail: 0,
+            origin: 0,
             chars,
             cursor,
             anchor: cursor,
@@ -75,6 +109,34 @@ impl ReplayModel {
         }
         let s: String = self.chars.iter().collect();
         if s == self.original { None } else { Some(s) }
+    }
+
+    /// What `result` is diffed against: the paste, extended by neighbouring text a selection revealed.
+    pub fn base_text(&self) -> &str {
+        &self.original
+    }
+
+    /// The candidate for the replayed edit. With neighbouring text in the base, the heard words must touch the
+    /// paste itself.
+    pub fn candidate(&self, dictionary: &[crate::dictionary::DictEntry], rejected: &std::collections::HashSet<String>) -> Option<crate::vocab::Candidate> {
+        let r = self.result()?;
+        let c = crate::vocab::candidate(&self.original, &r, dictionary, rejected)?;
+        if self.lead == 0 && self.trail == 0 {
+            return Some(c);
+        }
+        let base: Vec<char> = self.original.chars().collect();
+        let h: Vec<char> = c.heard.chars().collect();
+        if h.is_empty() || h.len() > base.len() {
+            return None;
+        }
+        let (lo, hi) = (self.lead, base.len() - self.trail);
+        let eq = |a: char, b: char| a == b || a.to_lowercase().eq(b.to_lowercase());
+        for i in 0..=(base.len() - h.len()) {
+            if (0..h.len()).all(|k| eq(base[i + k], h[k])) && i < hi && i + h.len() > lo {
+                return Some(c);
+            }
+        }
+        None
     }
 
     fn sel(&self) -> (usize, usize) {
@@ -214,8 +276,8 @@ impl ReplayModel {
                     Move::Right => if collapse { Some(hi) } else if self.cursor < self.chars.len() { Some(self.cursor + 1) } else { None },
                     Move::WordLeft => if collapse || self.cursor == 0 { None } else { Some(self.word_left(self.cursor)) },
                     Move::WordRight => if collapse || self.cursor >= self.chars.len() { None } else { Some(self.word_right(self.cursor)) },
-                    Move::LineStart => self.line_start(self.cursor),
-                    Move::LineEnd => self.line_end(self.cursor),
+                    Move::LineStart => self.line_start(if select { self.cursor } else { lo }),
+                    Move::LineEnd => self.line_end(if select { self.cursor } else { hi }),
                 };
                 match target {
                     None => self.freeze("boundary", false),
@@ -226,6 +288,10 @@ impl ReplayModel {
                         }
                     }
                 }
+            }
+            Event::Select(sel) => {
+                self.counts.nav += 1;
+                self.select(&sel);
             }
             Event::SelectAll => {
                 self.counts.other += 1;
@@ -239,6 +305,181 @@ impl ReplayModel {
                 self.counts.other += 1;
                 self.freeze("unsupported", false);
             }
+        }
+    }
+
+    fn char_index_utf16(&self, u: i64) -> Option<usize> {
+        let mut acc: i64 = 0;
+        for (i, c) in self.chars.iter().enumerate() {
+            if acc == u {
+                return Some(i);
+            }
+            if acc > u {
+                return None;
+            }
+            acc += c.len_utf16() as i64;
+        }
+        if acc == u { Some(self.chars.len()) } else { None }
+    }
+
+    fn occurrences(t: &[char], hay: &[char]) -> Vec<usize> {
+        if t.is_empty() || t.len() > hay.len() {
+            return vec![];
+        }
+        (0..=(hay.len() - t.len())).filter(|&i| hay[i..i + t.len()] == *t).collect()
+    }
+
+    /// Splits `text` into UTF-16 prefix / middle / suffix; None when a cut falls inside a character.
+    fn split(text: &str, before: usize, after: usize) -> Option<(Vec<char>, Vec<char>, Vec<char>)> {
+        let u: Vec<u16> = text.encode_utf16().collect();
+        if before + after > u.len() {
+            return None;
+        }
+        let a = String::from_utf16(&u[..before]).ok()?;
+        let b = String::from_utf16(&u[before..u.len() - after]).ok()?;
+        let c = String::from_utf16(&u[u.len() - after..]).ok()?;
+        Some((a.chars().collect(), b.chars().collect(), c.chars().collect()))
+    }
+
+    fn extend(&mut self, before: &[char], after: &[char]) {
+        if !before.is_empty() {
+            let b: String = before.iter().collect();
+            self.chars.splice(0..0, before.iter().copied());
+            self.original = format!("{b}{}", self.original);
+            self.lead += before.len();
+            self.origin -= b.encode_utf16().count() as i64;
+            self.cursor += before.len();
+            self.anchor += before.len();
+        }
+        if !after.is_empty() {
+            self.chars.extend_from_slice(after);
+            let a: String = after.iter().collect();
+            self.original.push_str(&a);
+            self.trail += after.len();
+        }
+    }
+
+    /// Keeps the selection's direction (see ReplayModel.setSelection).
+    fn set_selection(&mut self, lo: usize, hi: usize) {
+        if lo != hi && self.anchor == hi {
+            self.cursor = lo;
+        } else {
+            self.anchor = lo;
+            self.cursor = hi;
+        }
+    }
+
+    fn select(&mut self, s: &Selection) {
+        if let (Some(a), Some(b)) = (s.start, s.end) {
+            if a <= b {
+                let (u0, u1) = (a - self.origin, b - self.origin);
+                let total: i64 = self.chars.iter().map(|c| c.len_utf16() as i64).sum();
+                if u1 < 0 || u0 > total || (u0 != u1 && (u1 <= 0 || u0 >= total)) {
+                    self.freeze("select-outside", false);
+                    return;
+                }
+                if u0 >= 0 && u1 <= total {
+                    if let (Some(i0), Some(i1)) = (self.char_index_utf16(u0), self.char_index_utf16(u1)) {
+                        let cur: String = self.chars[i0..i1].iter().collect();
+                        if s.text.is_none() || s.text.as_deref() == Some(cur.as_str()) {
+                            self.set_selection(i0, i1);
+                            return;
+                        }
+                    }
+                }
+                // Crossing the boundary: the selected text supplies the neighbouring characters.
+                if let Some(t) = &s.text {
+                    if t.encode_utf16().count() as i64 == u1 - u0 && (u0 < 0 || u1 > total) {
+                        if let Some((pre, mid, post)) = Self::split(t, (-u0).max(0) as usize, (u1 - total).max(0) as usize) {
+                            if let (Some(i0), Some(i1)) = (self.char_index_utf16(u0.max(0)), self.char_index_utf16(u1.min(total))) {
+                                if self.chars[i0..i1] == mid[..] && (pre.is_empty() || i0 == 0) && (post.is_empty() || i1 == self.chars.len()) {
+                                    self.extend(&pre, &post);
+                                    let start = if pre.is_empty() { i0 } else { 0 };
+                                    self.set_selection(start, start + pre.len() + mid.len() + post.len());
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let text = match &s.text {
+            Some(t) if !t.is_empty() => t,
+            _ => {
+                self.freeze("select-unknown", false);
+                return;
+            }
+        };
+        let t: Vec<char> = text.chars().collect();
+        let hits = Self::occurrences(&t, &self.chars);
+        if !hits.is_empty() {
+            let (lo, hi) = self.sel();
+            let dist = |i: usize| -> i64 { 0.max(i as i64 - hi as i64).max(lo as i64 - (i + t.len()) as i64) };
+            let best = hits.iter().map(|&i| dist(i)).min().unwrap();
+            let at = *hits.iter().find(|&&i| dist(i) == best).unwrap();
+            self.set_selection(at, at + t.len());
+            return;
+        }
+        let whole = Self::occurrences(&self.chars, &t);
+        if whole.len() == 1 && !self.chars.is_empty() {
+            let w = whole[0];
+            let n = self.chars.len();
+            let (pre, post) = (t[..w].to_vec(), t[w + n..].to_vec());
+            self.extend(&pre, &post);
+            let n2 = self.chars.len();
+            self.set_selection(0, n2);
+            return;
+        }
+        self.freeze(if whole.len() > 1 { "select-ambiguous" } else { "select-outside" }, false);
+    }
+
+    /// Starts a selection lookup (mouse-down, Ctrl+A, shift-move past the paste): keys queue until `resolve`.
+    pub fn await_selection(&mut self) {
+        if self.frozen.is_none() {
+            self.awaiting_caret = true;
+        }
+    }
+
+    pub fn awaiting(&self) -> bool {
+        self.awaiting_caret
+    }
+
+    /// Applies the looked-up selection (it already reflects the triggering key), then the queued keys.
+    pub fn resolve(&mut self, s: Option<Selection>, fallback: Option<Event>, fail_kind: &str) {
+        if !self.awaiting_caret {
+            return;
+        }
+        self.awaiting_caret = false;
+        let q = std::mem::take(&mut self.queue);
+        if let Some(s) = s {
+            self.apply(Event::Select(s));
+        } else if let Some(f) = fallback {
+            self.apply(f);
+        } else {
+            self.freeze(fail_kind, false);
+            return;
+        }
+        for e in q {
+            self.apply(e);
+        }
+    }
+
+    /// True when the model cannot place this selection itself and the learner should ask the UI for it.
+    pub fn selection_needs_lookup(&self, e: &Event) -> bool {
+        if self.frozen.is_some() || self.awaiting_caret {
+            return false;
+        }
+        if *e == Event::SelectAll {
+            return true;
+        }
+        match e {
+            Event::Move(m, true) => match m {
+                Move::Left | Move::WordLeft => self.cursor == 0,
+                Move::Right | Move::WordRight => self.cursor >= self.chars.len(),
+                Move::LineStart | Move::LineEnd => true,
+            },
+            _ => false,
         }
     }
 

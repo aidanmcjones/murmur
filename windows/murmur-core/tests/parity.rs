@@ -3,7 +3,7 @@
 
 use murmur_core::cleanup::{basic_clean, needs_llm};
 use murmur_core::dictionary::{finalize, DictEntry};
-use murmur_core::replay::{Event, Move, ReplayModel};
+use murmur_core::replay::{Event, Move, ReplayModel, Selection};
 use murmur_core::vocab;
 use serde_json::Value;
 use std::collections::HashSet;
@@ -34,6 +34,18 @@ fn event(v: &Value) -> Event {
         "delete_word" => Event::DeleteWord,
         "delete_line" => Event::DeleteLine,
         "select_all" => Event::SelectAll,
+        "select" => {
+            let (st, en) = match v.get("range").and_then(|r| r.as_array()) {
+                Some(r) => (r[0].as_i64(), r[1].as_i64()),
+                None => (None, None),
+            };
+            Event::Select(Selection {
+                text: v.get("text").and_then(|t| t.as_str()).map(String::from),
+                start: st,
+                end: en,
+                via: s(v, "via"),
+            })
+        }
         "undo" => Event::Undo,
         "unsupported" => Event::Unsupported,
         "move" => {
@@ -120,7 +132,7 @@ fn learn_vectors() {
                 if m.frozen != want_frozen {
                     fails.push(format!("replay {pasted:?}: frozen {:?}, want {want_frozen:?}", m.frozen));
                 }
-                let got = cand_json(&res.and_then(|r| vocab::candidate(&pasted, &r, &[], &none)));
+                let got = cand_json(&m.candidate(&[], &none));
                 if got != c["expected"] {
                     fails.push(format!("replay-candidate {pasted:?}: got {got}, want {}", c["expected"]));
                 }

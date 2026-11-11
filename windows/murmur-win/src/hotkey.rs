@@ -257,6 +257,10 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
             if let Some(tx) = LEARNER_TX.get() {
                 let _ = tx.send(crate::uia::LCmd::Mouse);
             }
+        } else if msg == WM_LBUTTONUP || msg == WM_RBUTTONUP {
+            if let Some(tx) = LEARNER_TX.get() {
+                let _ = tx.send(crate::uia::LCmd::MouseUp);
+            }
         }
     }
     CallNextHookEx(None, code, wparam, lparam)
