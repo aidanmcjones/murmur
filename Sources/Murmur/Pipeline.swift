@@ -7,6 +7,8 @@ struct PipelineResult {
     var asrMs: Int
     var llmMs: Int
     var mode: Cleanup.Mode = .det
+    /// LLM budget used for this run (ms), 0 when not a release-budget run.
+    var budgetMs = 0
 }
 
 /// Holds the raw transcript of an in-flight run as soon as ASR finishes, so the caller can paste a
@@ -93,7 +95,9 @@ enum Pipeline {
     static func now() -> Double { Date().timeIntervalSince1970 * 1000 }
 
     /// Steps 3-7. Returns nil when there is nothing to insert.
-    static func run(samples: [Float], ctx: AppContext, llmTimeout: TimeInterval, rawBox: RawBox? = nil) async -> PipelineResult? {
+    /// `scaleBudget`: use `Cleanup.releaseBudget` for the transcript's length instead of `llmTimeout`.
+    static func run(samples: [Float], ctx: AppContext, llmTimeout: TimeInterval, scaleBudget: Bool = false,
+                    rawBox: RawBox? = nil) async -> PipelineResult? {
         let dict = UserDictionary.load()
         let vocab = UserDictionary.vocabulary(dict)
         var prompt = ""
@@ -125,12 +129,14 @@ enum Pipeline {
         DebugLog.log("pipeline: samples=\(samples.count) segs=\(segs.count) rawLen=\(raw.count) asr=\(Int(t1 - t0))ms")
         if raw.isEmpty { DebugLog.log("pipeline: empty after gate -> nil"); return nil }
         rawBox?.set((raw, Int(t1 - t0)))
+        let timeout = scaleBudget ? Cleanup.releaseBudget(chars: raw.count) : llmTimeout
         let (cleaned, mode) = await Cleanup.clean(raw: raw, vocab: vocab, before: ctx.before,
-                                                  bundleId: ctx.bundleId, name: ctx.appName, timeout: llmTimeout)
+                                                  bundleId: ctx.bundleId, name: ctx.appName, timeout: timeout)
         let t2 = now()
-        DebugLog.log("pipeline: cleanup \(mode.rawValue) \(Int(t2 - t1))ms cancelled=\(Task.isCancelled) len=\(cleaned.count)")
+        DebugLog.log("pipeline: cleanup \(mode.rawValue) \(Int(t2 - t1))ms budget=\(Int(timeout * 1000))ms rawLen=\(raw.count) cancelled=\(Task.isCancelled) len=\(cleaned.count)")
         let final = Post.finalize(cleaned, before: ctx.before, dictionary: dict)
-        return PipelineResult(raw: raw, cleaned: cleaned, final: final, asrMs: Int(t1 - t0), llmMs: Int(t2 - t1), mode: mode)
+        return PipelineResult(raw: raw, cleaned: cleaned, final: final, asrMs: Int(t1 - t0), llmMs: Int(t2 - t1), mode: mode,
+                              budgetMs: scaleBudget ? Int(timeout * 1000) : 0)
     }
 }
 
@@ -150,10 +156,15 @@ enum Headless {
             FileHandle.standardError.write(Data("murmur: cannot read \(file)\n".utf8)); return 1
         }
         let ctx = AppContext(bundleId: bid, appName: ContextProbe.name(forBundleId: bid), before: val("--before") ?? "")
-        guard let r = await Pipeline.run(samples: samples, ctx: ctx, llmTimeout: 30) else { return 0 }
+        // --release-budget: the app's post-release LLM budget (scaled with length) instead of a generous 30 s.
+        let t0 = Pipeline.now()
+        guard let r = await Pipeline.run(samples: samples, ctx: ctx, llmTimeout: 30, scaleBudget: args.contains("--release-budget"))
+        else { return 0 }
+        let total = Int(Pipeline.now() - t0)
         _ = r.final.withCString { write(realOut, $0, strlen($0)) }
         _ = write(realOut, "\n", 1)
-        FileHandle.standardError.write(Data("[asr \(r.asrMs)ms, llm \(r.llmMs)ms \(r.mode.rawValue)] raw: \(r.raw)\n".utf8))
+        let budget = r.budgetMs > 0 ? " budget \(r.budgetMs)ms" : ""
+        FileHandle.standardError.write(Data("[asr \(r.asrMs)ms, llm \(r.llmMs)ms \(r.mode.rawValue)\(budget), total \(total)ms] raw: \(r.raw)\n".utf8))
         return 0
     }
 }

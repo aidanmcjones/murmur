@@ -238,18 +238,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             var result: PipelineResult?
             if useSpec, let job {
                 result = await Self.value(of: job.task, within: Self.releaseBudget)
+                // Long transcripts: the spec cleanup for this cut is already running, keep awaiting it (HUD stays
+                // in its processing state) up to the length-scaled budget instead of restarting or falling back.
+                if result == nil, let (raw, _) = job.raw.value {
+                    let budget = Cleanup.releaseBudget(chars: raw.count)
+                    let left = budget - Date().timeIntervalSince(t0)
+                    DebugLog.log("finish: spec cleanup running, budget=\(Int(budget * 1000))ms chars=\(raw.count) left=\(Int(left * 1000))ms")
+                    if left > 0.02 { result = await Self.value(of: job.task, within: left) }
+                }
                 if result == nil, let (raw, asrMs) = job.raw.value {
                     job.task.cancel()
-                    DebugLog.log("finish: spec cleanup missed budget -> deterministic")
+                    DebugLog.log("finish: spec cleanup missed budget=\(Int(Cleanup.releaseBudget(chars: raw.count) * 1000))ms -> deterministic")
                     result = Self.fallback(raw: raw, asrMs: asrMs, ctx: c)
                 } else if result == nil {
                     result = await job.task.value
                 }
             } else {
-                result = await Pipeline.run(samples: samples, ctx: c, llmTimeout: Self.releaseBudget)
+                result = await Pipeline.run(samples: samples, ctx: c, llmTimeout: Self.releaseBudget, scaleBudget: true)
             }
             await MainActor.run {
-                DebugLog.log("finish: result=\(result == nil ? "nil" : "len=\(result!.final.count)") spec=\(useSpec) total=\(Int(Date().timeIntervalSince(t0) * 1000))ms")
+                DebugLog.log("finish: result=\(result == nil ? "nil" : "len=\(result!.final.count) mode=\(result!.mode.rawValue) llm=\(result!.llmMs)ms") spec=\(useSpec) total=\(Int(Date().timeIntervalSince(t0) * 1000))ms")
                 if let r = result {
                     Inserter.insert(r.final, bundleId: c.bundleId)
                     VocabLearner.shared.pasted(r.final, bundleId: c.bundleId)

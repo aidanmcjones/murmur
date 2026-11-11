@@ -172,6 +172,17 @@ enum Cleanup {
 
     enum Mode: String { case llm, det, timeout }
 
+    /// Post-release LLM budget. Short dictations keep 0.9 s (unchanged latency); past ~40 words (220 chars) it grows
+    /// with the local Qwen3-4B server's cost: measured 1.45 ms/char warm (57 -> 1099 chars: 122 -> 1633 ms, M5 Pro),
+    /// ~1.9 ms/char in real use under load (928 chars: 1565-1761 ms), so 2.0 ms/char; capped at 3.5 s (~1500 chars).
+    static let shortBudget: TimeInterval = 0.9
+    static let shortChars = 220
+    static let msPerChar = 2.0
+    static let maxBudget: TimeInterval = 3.5
+    static func releaseBudget(chars: Int) -> TimeInterval {
+        min(maxBudget, shortBudget + Double(max(0, chars - shortChars)) * msPerChar / 1000)
+    }
+
     /// Returns cleaned text and how it was produced. Falls back to deterministic cleanup when the transcript
     /// doesn't need the LLM, or when the LLM fails or misses `timeout`.
     static func clean(raw: String, vocab: [String], before: String, bundleId: String, name: String,

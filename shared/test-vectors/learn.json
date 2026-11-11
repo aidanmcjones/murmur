@@ -2820,9 +2820,49 @@
       }
     ],
     "expected" : null,
+    "frozen" : "select-ambiguous",
+    "kind" : "replay",
+    "pasted" : "the cat and the dog",
+    "result" : null
+  },
+  {
+    "events" : [
+      {
+        "range" : [
+          12,
+          15
+        ],
+        "text" : "the",
+        "type" : "select",
+        "via" : "double_click"
+      },
+      {
+        "text" : "a",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
     "frozen" : null,
     "kind" : "replay",
     "pasted" : "the cat and the dog",
     "result" : "the cat and a dog"
+  },
+  {
+    "events" : [
+      {
+        "text" : "cat",
+        "type" : "select",
+        "via" : "double_click"
+      },
+      {
+        "text" : "dog",
+        "type" : "text"
+      }
+    ],
+    "expected" : null,
+    "frozen" : "select-short",
+    "kind" : "replay",
+    "pasted" : "the cat sat",
+    "result" : null
   }
 ]
