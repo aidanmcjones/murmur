@@ -19,8 +19,38 @@ fn known_plain(w: &str) -> bool {
     words().contains(w)
 }
 
-/// True when the word is a known English word (handles simple contractions and possessives).
+/// Splits camelCase / PascalCase into parts ("SvelteKit" -> Svelte, Kit); None when there is no internal capital.
+fn camel_parts(word: &str) -> Option<Vec<String>> {
+    let cs: Vec<char> = word.chars().collect();
+    let mut parts: Vec<String> = vec![];
+    let mut cur = String::new();
+    for (i, c) in cs.iter().enumerate() {
+        if i > 0 && c.is_uppercase() && cs[i - 1].is_lowercase() {
+            parts.push(std::mem::take(&mut cur));
+        }
+        cur.push(*c);
+    }
+    parts.push(cur);
+    if parts.len() > 1 { Some(parts) } else { None }
+}
+
+/// True when the word is a known English word. Like the macOS speller it also accepts single letters, file-name
+/// style tokens ("llama.cpp"), camelCase compounds of known words, and all-caps forms of known words.
 pub fn is_known(word: &str) -> bool {
+    if word.chars().count() == 1 {
+        return true;
+    }
+    if word.contains('.') {
+        let parts: Vec<&str> = word.split('.').collect();
+        if parts.len() > 1 && parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_alphanumeric())) {
+            return true;
+        }
+    }
+    if let Some(parts) = camel_parts(word) {
+        if parts.iter().all(|p| is_known(p)) {
+            return true;
+        }
+    }
     let w = word.to_lowercase().replace('\u{2019}', "'");
     if let Some(p) = w.find('\'') {
         let (pre, suf) = (&w[..p], &w[p + 1..]);
