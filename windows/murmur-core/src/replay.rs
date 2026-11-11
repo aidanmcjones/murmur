@@ -27,6 +27,9 @@ pub enum Event {
     Select(Selection),
 }
 
+/// Shortest selected text trusted when the UI gave no range.
+const MIN_TEXT_ONLY_SELECTION: usize = 4;
+
 /// Selected text and/or its range. `start`/`end` are UTF-16 offsets relative to the start of the original paste
 /// in the field (negative = before it); only set when the field value is readable. `via` is informational.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -414,11 +417,13 @@ impl ReplayModel {
         let t: Vec<char> = text.chars().collect();
         let hits = Self::occurrences(&t, &self.chars);
         if !hits.is_empty() {
-            let (lo, hi) = self.sel();
-            let dist = |i: usize| -> i64 { 0.max(i as i64 - hi as i64).max(lo as i64 - (i + t.len()) as i64) };
-            let best = hits.iter().map(|&i| dist(i)).min().unwrap();
-            let at = *hits.iter().find(|&&i| dist(i) == best).unwrap();
-            self.set_selection(at, at + t.len());
+            // Without a range, a short or repeated text may have been selected elsewhere in the field ("the"):
+            // only a unique occurrence of >= 4 characters is trusted, anything else is uncertain.
+            if hits.len() != 1 || t.len() < MIN_TEXT_ONLY_SELECTION {
+                self.freeze(if hits.len() > 1 { "select-ambiguous" } else { "select-short" }, false);
+                return;
+            }
+            self.set_selection(hits[0], hits[0] + t.len());
             return;
         }
         let whole = Self::occurrences(&self.chars, &t);
