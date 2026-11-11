@@ -312,6 +312,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         add(menu, "Disable Globe emoji popup", #selector(disableEmojiPopup))
         menu.addItem(.separator())
 
+        add(menu, "Add word to vocabulary…", #selector(addVocabularyWord))
         add(menu, "Edit vocabulary", #selector(editVocabulary))
         add(menu, "Learn vocabulary from my edits", #selector(toggleLearn)).state = Settings.learnVocab ? .on : .off
         add(menu, "Import from Wispr Flow", #selector(importWispr))
@@ -422,6 +423,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         try? p.run()
         p.waitUntilExit()
         alert("Globe emoji popup disabled", p.terminationStatus == 0 ? "You may need to log out and back in." : "The defaults command failed.")
+    }
+
+    @objc private func addVocabularyWord() {
+        NSApp.activate(ignoringOtherApps: true)
+        let a = NSAlert()
+        a.messageText = "Add word to vocabulary"
+        a.informativeText = "Correct spelling is required. Add how it is usually misheard to also auto-fix it."
+        let right = NSTextField(frame: NSRect(x: 0, y: 30, width: 300, height: 24))
+        right.placeholderString = "Correct spelling"
+        let heard = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        heard.placeholderString = "Usually heard as (optional)"
+        let box = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 56))
+        box.addSubview(right); box.addSubview(heard)
+        a.accessoryView = box
+        a.addButton(withTitle: "Add")
+        a.addButton(withTitle: "Cancel")
+        a.window.initialFirstResponder = right
+        guard a.runModal() == .alertFirstButtonReturn else { return }
+        let wanted = right.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !wanted.isEmpty else { return }
+        let n = UserDictionary.addLearned(heard: heard.stringValue, wanted: wanted)
+        DebugLog.log("vocab: manual add \(wanted) (+\(n))")
     }
 
     @objc private func editVocabulary() {

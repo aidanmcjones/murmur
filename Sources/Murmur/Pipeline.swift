@@ -18,11 +18,62 @@ final class RawBox: @unchecked Sendable {
     func set(_ v: (String, Int)) { lock.lock(); _v = v; lock.unlock() }
 }
 
+enum Fuzzy {
+    /// Lowercase, alphanumerics only, repeated characters collapsed: "Collab tree" -> "colabtre".
+    static func norm(_ s: String) -> String {
+        var out = ""
+        for c in s.lowercased() where c.isLetter || c.isNumber {
+            if out.last != c { out.append(c) }
+        }
+        return out
+    }
+
+    static func eligible(_ e: DictEntry) -> Bool {
+        guard let r = e.replacement, !r.isEmpty else { return false }
+        return e.learned == true || !r.contains(where: { $0.isWhitespace })
+    }
+
+    private static let wordRe = try! NSRegularExpression(pattern: "[\\p{L}\\p{N}]+")
+
+    /// Replaces any 1-3 consecutive whole words (separated by spaces or hyphens) whose normalized form
+    /// equals the normalized phrase.
+    static func apply(_ text: String, phrase: String, replacement: String) -> String {
+        let target = norm(phrase)
+        guard target.count >= 5 else { return text }
+        let ns = text as NSString
+        let words = wordRe.matches(in: text, range: NSRange(location: 0, length: ns.length)).map { $0.range }
+        func joined(_ i: Int, _ j: Int) -> Bool {  // words i and j=i+1 separated only by blanks/hyphens
+            let gap = ns.substring(with: NSRange(location: words[i].upperBound, length: words[j].location - words[i].upperBound))
+            return !gap.isEmpty && gap.allSatisfy { $0 == " " || $0 == "\t" || $0 == "-" || $0 == "\u{2013}" }
+        }
+        var hits: [NSRange] = []
+        var i = 0
+        while i < words.count {
+            var matched = 0
+            var acc = ""
+            for len in 1...3 where i + len <= words.count {
+                if len > 1, !joined(i + len - 2, i + len - 1) { break }
+                acc += norm(ns.substring(with: words[i + len - 1]))
+                if acc == target { matched = len; break }
+                if acc.count > target.count { break }
+            }
+            if matched > 0 {
+                hits.append(NSRange(location: words[i].location, length: words[i + matched - 1].upperBound - words[i].location))
+                i += matched
+            } else { i += 1 }
+        }
+        var out = text as NSString
+        for r in hits.reversed() { out = out.replacingCharacters(in: r, with: replacement) as NSString }
+        return out as String
+    }
+}
+
 enum Post {
     static func applyDictionary(_ text: String, _ entries: [DictEntry]) -> String {
         var t = text
         for e in entries {
             guard let rep = e.replacement, !rep.isEmpty, !e.phrase.isEmpty else { continue }
+            defer { if Fuzzy.eligible(e) { t = Fuzzy.apply(t, phrase: e.phrase, replacement: rep) } }
             let pat = "(?<![\\p{L}\\p{N}_])" + NSRegularExpression.escapedPattern(for: e.phrase) + "(?![\\p{L}\\p{N}_])"
             guard let re = try? NSRegularExpression(pattern: pat, options: [.caseInsensitive]) else { continue }
             t = re.stringByReplacingMatches(in: t, range: NSRange(t.startIndex..., in: t),

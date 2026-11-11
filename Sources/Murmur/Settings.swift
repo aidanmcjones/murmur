@@ -126,6 +126,8 @@ enum Keychain {
 struct DictEntry: Codable, Equatable {
     var phrase: String
     var replacement: String?
+    /// Rule created from an accepted suggestion / manual add: also matched fuzzily (see Fuzzy.norm).
+    var learned: Bool? = nil
 }
 
 enum UserDictionary {
@@ -142,12 +144,21 @@ enum UserDictionary {
     }
 
     /// Adds the deterministic fix (heard -> wanted) and the plain vocabulary term; returns entries added.
+    /// `heard` may be empty (manual add of just the correct spelling).
     @discardableResult
-    static func addLearned(heard: String, wanted: String) -> Int {
+    static func addLearned(heard: String?, wanted: String) -> Int {
         var entries = load()
         var added = 0
-        let hasFix = entries.contains { $0.phrase.lowercased() == heard.lowercased() && !($0.replacement ?? "").isEmpty }
-        if !hasFix { entries.append(DictEntry(phrase: heard, replacement: wanted)); added += 1 }
+        let h = (heard ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if !h.isEmpty {
+            let hn = Fuzzy.norm(h)
+            let hasFix = entries.contains {
+                guard let r = $0.replacement, !r.isEmpty else { return false }
+                return $0.phrase.lowercased() == h.lowercased()
+                    || (Fuzzy.norm($0.phrase) == hn && r.lowercased() == wanted.lowercased())
+            }
+            if !hasFix { entries.append(DictEntry(phrase: h, replacement: wanted, learned: true)); added += 1 }
+        }
         let hasTerm = entries.contains { $0.phrase.lowercased() == wanted.lowercased() && ($0.replacement ?? "").isEmpty }
         if !hasTerm { entries.append(DictEntry(phrase: wanted)); added += 1 }
         if added > 0 { save(entries) }
