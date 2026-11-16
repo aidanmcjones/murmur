@@ -101,4 +101,4 @@ python3 -I eval/score_asr.py eval/data2 eval eval/out/asr_*.json
 python3 -I eval/cleanup_eval.py eval/data2 eval/out/asr_wfasr.json . 8179 eval/out/ce_wfasr.json
 python3 -I eval/swift_e2e.py eval/data2 build/Murmur.app/Contents/MacOS/Murmur eval/out/e2e.json
 ```
-Cleanup runs on Murmur's own llama.cpp server (port 8179, `models/qwen3-4b-instruct-2507-q4_K_M.gguf`) with the weights mlock'ed in RAM. Murmur is signed with a local "Murmur Local Signing" certificate so macOS permission grants survive rebuilds.
+Cleanup runs on Murmur's own llama.cpp server (port 8179, `models/qwen3-4b-instruct-2507-q4_K_M.gguf`). The weights are not mlock'ed: pinning them starved the audio daemon under memory pressure. If a code-signing identity named "Murmur Local Signing" exists in your keychain, `scripts/build.sh` signs with it so macOS permission grants survive rebuilds; otherwise builds are ad-hoc signed and Microphone/Accessibility must be re-granted after each rebuild.
